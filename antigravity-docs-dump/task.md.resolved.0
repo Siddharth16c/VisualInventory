@@ -1,0 +1,45 @@
+# VisualOS — Local-First Inventory PWA
+
+## Phase 0: Project Scaffold & Infrastructure
+- [ ] Initialize Vite + React 18 + TypeScript project
+- [ ] Install all dependencies (TailwindCSS, Zustand, Dexie, vite-plugin-pwa, etc.)
+- [ ] Configure TailwindCSS
+- [ ] Configure PWA (vite-plugin-pwa with generateSW)
+- [ ] Set up Dexie.js database with StorageManager persist()
+- [ ] Set up Zustand store
+- [ ] Create app layout shell (sidebar, header, routing)
+
+## Phase 1: Billing & Order Creation (Priority 1)
+- [ ] Products CRUD with TanStack Table (fuzzy search, sorting)
+- [ ] POS cart interface
+- [ ] Order creation flow (prospect selection, line items, totals)
+- [ ] A4 invoice print (react-to-print)
+- [ ] Thermal / RawBT invoice generation (print-ready image/PDF)
+
+## Phase 2: Price List Generator (Priority 2)
+- [ ] Select products for price list
+- [ ] Generate text-based PDF price list (jsPDF)
+
+## Phase 3: Media & WhatsApp Sharing (Priority 3)
+- [ ] Product media upload & storage in Dexie
+- [ ] Browser image compression (browser-image-compression)
+- [ ] FFmpeg.wasm Web Worker for GIF / Flipbook generation
+- [ ] Progress bar for media processing
+- [ ] WhatsApp share (Web Share API + fallback)
+
+## Phase 4: Prospect Management (Priority 4)
+- [ ] Prospects CRUD
+- [ ] Visit records & route tracking
+- [ ] Travel records & route management
+
+## Phase 5: Accounting & Dashboard (Priority 5)
+- [ ] Revenue, costs, profit margin calculations
+- [ ] Dashboard with key metrics
+
+## Phase 6: Maintenance & Backup
+- [ ] JSON export/import of entire Dexie database
+- [ ] Documentation: setup, install, run, test instructions
+
+## Phase 7: Testing
+- [ ] Write test cases for critical features (billing, price list, backup)
+- [ ] Edge case tests
