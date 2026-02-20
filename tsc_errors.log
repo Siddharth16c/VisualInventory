@@ -1,0 +1,6 @@
+﻿src/components/billing/InvoiceA4.tsx(55,42): error TS2339: Property 'item_size' does not exist on type 'Item'.
+src/components/billing/InvoiceA4.tsx(55,101): error TS2339: Property 'item_size' does not exist on type 'Item'.
+src/components/StaticDataManager.tsx(81,30): error TS2339: Property 'item_types' does not exist on type 'VisualOSDatabase'.
+src/components/StaticDataManager.tsx(82,31): error TS2339: Property 'item_types' does not exist on type 'VisualOSDatabase'.
+src/components/StaticDataManager.tsx(83,38): error TS2339: Property 'item_types' does not exist on type 'VisualOSDatabase'.
+src/components/StaticDataManager.tsx(84,32): error TS2339: Property 'item_types' does not exist on type 'VisualOSDatabase'.

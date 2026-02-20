@@ -1,0 +1,78 @@
+
+
+
+
+
+1. media sharing doesn't work on either devices - phone/web(desktop) - when ran on localhost
+on phone sharing image control directly opens whatsapp - it should allow multiple options - detect all shareable apps - at least whatsapp and bluetooth
+GIF uploading is not handled?
+2. Catalogue generation sharing doesn't work - allow download(.html file generated) option so that at least it can be shared separately if sharing file 
+doesn't work
+3. Let there be new table(column) - variant_params_3 for item size - a4, a5, long(a3), jumbo for notebooks; big, small, special for flower pots and so on.
+SO now var 1 for - 172 pages, 140, 72, 280, 380, var 2 for - single line, sqline, 4 line. Since we are doing this for ever growing mixed*unorganised domains 
+business inventory, do I have to be concerned with core DB issues like mapping inconsistencies when scaling or underplanned DB structure? Does choosing 
+non-relational DB here mitigate risks like those?
+4. Referential integrity redundancy issue - we have added insertion feature for all static tables on the add item dialog itself but it may not be 
+a good practice since I can insert any static values without mapping it with relevant PKs - product/item tables. Does it matter to worry about this when 
+using non relational DB? I mean we only worry about them because it becomes harder to fetch associated data consistently/organically when working on logic
+in the future.
+5. Add p_unit/parcel column in the price list instead of parcel price column
+6. Maintenance tabs for some static tables won't open for CRUD operations 
+7. I want a feature enhancement - order(temporary) creation- shareable file before bill saving - created -> shared and reviewed in realtime from 
+client -> confirmed then saved as proper bill format in the app and goes in saved bills
+8. Auto backup DB to drive
+9. Travels features were to add literal locations(area/towns and locations of each prospect) so that when a user plans next visit he has a link of 
+'google my maps' custom map as a travel record A.K.A a business route or at least a simple related list of towns and prospects and several towns that can be 
+traveled in one trip is defined as a route. 
+10. suggest ways to bulk insert 1000s of items accurately, safely and efficiently( with a backup/rollout option ) - can we gather data using some logic like detecting through image/voice based
+transcripted data insertion, I am looking to automate data insertion/basic DML operations at inherent level to be used by non tech users but super fast and efficiently
+
+
+
+
+
+New implementation:
+
+Voxel based representation for warehouse inventory using remix + vite + react 3 fiber + dexie
+The idea is to measure warehouse create several outlining (civil architecture diagrams) then display top view as UI layer to work on features like 
+1. searching parcel/items -> highlighting several places in the warehouse(mixed). parcel - voxel simple direct relation table -> easy for detection in dexie 
+2. Monitor mathematics for parameters to help in making place for new orders efficiently without disturbing ongoing flow - dynamicaly adopting space allocation based on parameters
+3. visual representation from top view(to visualise inventory) like shown in mobile games 4d BIM based enriched voxel map for UAV path planning 
+4. stats of inventory(basic list of numbers of stocks shown as a opaque table in the main UI)- like shown in analytical map images 
+5. We can use obisidian or some logger for daily dynamics - to ensure app sync with realtime changes.
+6. Zoom in on the 3d simulation(actually 2d)
+7. Several views - detailed - multiple floors * multiple sections like CCTV view to grasp the nuances of parcels and other material correctly(a car, pillars)
+8. Potential to scale to a SAAS decentralised product to sell to several businesses as a one time sold product - with docs/manuals(fancy and detailed like we get for lego toys) and additional charges
+for future assistance/consultancy.
+9. Suggest tools to depict the UI/pictures of parcels, objects, warehouse structure quickly - either simple functional directly or through python(scripts) using AI - like blender/CADquery/build123d
+10. Validate the idea and plan - suggest any changes in approach, stack, and so on.
+
+
+
+
+Your barcode idea is excellent. A barcodes FK table (barcode_value → item_id) means: scan once per variety → item created → then use app search for billing. This is exactly how retail POS systems work. I can build this as a future feature.
+
+Q11: Voxel Warehouse Visualization — My Assessment
+Is it doable? Yes, absolutely. React Three Fiber + Dexie is a solid stack for this.
+
+Is it helpful? It would be a game changer for warehouse operations — visual search, space optimization, and multi-floor navigation are genuinely high-value features.
+
+My recommendations:
+
+Stack: ✅ Remix + Vite + R3F + Dexie is great. Consider adding drei (R3F helpers) and leva (debug controls).
+Start 2D, grow to 3D: Begin with a top-down 2D grid (CSS Grid or Canvas), then layer R3F on top for the 3D view. This gives you an MVP faster.
+Voxel ↔ Parcel mapping: A simple warehouse_cells table (cell_id, floor, section, row, col, item_id, parcel_count) is sufficient.
+Asset tools: Use Blender for warehouse structure mockups, CadQuery/build123d for parametric parcel shapes, or just colored boxes in R3F (fastest).
+SaaS potential: Strong — but consider Supabase or PocketBase for multi-tenant sync instead of pure Dexie.
+
+Lets build the above idea - I approve everything.
+
+2 doubtful factors that could affect the effectivity:
+1. Is this possible for mixed domain business(DB schema, 2d app features, 3d new app features), are the features and modules agnostic enough to fulfill the use case of several businesses?
+2. Would we need a scanning device for barcode measurement? If we are only going to assign a sticker to one item and the insertion is still going to be manual(I will have to enter specification
+details myself then what's the use of barcode/scanner approach? Can't we use the core logic - create an algorithm that fetches millions of unique code - assign them to items of domains logically/
+reasoning and create a static table of unique strings of item and code assigned for user as reference table and also for core searching logic? Is the idea silly or pragmatic?)
+3. Lets design the roadmap/plan, DB schema for the new modular app and then develop data export pipeline(format, approach, organising) for current project that fits the new modular app idea.
+4. Priority - visual search, visual navigation of sections, mixed/random/unorganised parcel sizes, visual stock management(CRUD), sync with tangible dynamics(any momentum in the warehouse 
+reflected by the app logic), new order placement(reasonable/rational) -> dashboard to measure/monitor/display all the metrics -> parcel dimensions/area, sections, space utilised/remaining, 
+distinguished orders in(date wise) and shipment dispatched(sales and orders)
