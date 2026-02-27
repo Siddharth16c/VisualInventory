@@ -1,229 +1,73 @@
-# VisualOS — Technical Documentation
+# ⚙️ VisualOS — Technical Architecture
 
-## Architecture
-
-```
-```
-src/
-├── main.tsx              # App entry point (React + StrictMode)
-├── App.tsx               # Router + Layout wrapper
-├── index.css             # Global styles, glass tokens, animations
-│
-├── db/
-│   └── dexie.ts          # Database schema (v7), interfaces, seeding
-│
-├── store/
-│   └── store.ts          # Zustand global state (Cart + UI + Media slices)
-│
-├── pages/
-│   ├── Dashboard.tsx     # KPI overview
-│   ├── Inventory.tsx     # Item CRUD table (3-tier stock)
-│   ├── Catalogue.tsx     # Catalogue Builder (Flipbook)
-│   ├── Billing.tsx       # Cart + order creation
-│   ├── PriceList.tsx     # PDF price list generator
-│   ├── Accounting.tsx    # Revenue/cost tracking
-│   ├── Prospects.tsx     # Customer CRM
-│   ├── Routes.tsx        # Visit & travel logs
-│   ├── Media.tsx         # Image gallery + GIF gen
-│   └── Maintenance.tsx   # Backup/restore + Reference Data
-│
-├── components/
-│   ├── billing/
-│   │   ├── InvoiceA4.tsx     # A4 print layout
-│   │   ├── InvoiceThermal.tsx# Thermal print layout
-│   │   └── PrintHandler.tsx  # Print/share modal
-│   ├── layout/
-│   │   ├── Sidebar.tsx       # Navigation sidebar
-│   │   ├── Header.tsx        # Top header bar
-│   │   └── Layout.tsx        # Main layout wrapper
-│   └── ui/
-│       └── ToastContainer.tsx# Toast notification system
-│
-├── utils/
-│   ├── share.ts          # Web Share API + download helpers
-│   └── catalogueGenerator.ts # HTML Flipbook generator
-│
-├── workers/
-│   └── ffmpeg.worker.ts  # GIF generation Web Worker
-│
-└── __tests__/
-    ├── dexie.test.ts     # Database CRUD tests
-    ├── billing.test.ts   # Billing logic tests
-    └── pricelist.test.ts # Price list logic tests
-```
+> [!IMPORTANT]  
+> VisualOS is built on a modern **Vite + React 18 + Supabase** stack. It leverages cutting-edge browser technologies (WebGL, Web Workers) while maintaining a strict, secure relational database backend.
 
 ---
 
-## Tech Stack
+## 🧱 Technology Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | React 18+ with TypeScript |
-| Routing | React Router v6 |
-| State | Zustand (single store, multiple slices) |
-| Database | Dexie.js (IndexedDB wrapper) |
-| Live Queries | dexie-react-hooks (`useLiveQuery`) |
-| PDF | jsPDF |
-| Printing | react-to-print |
-| Icons | lucide-react |
-| Image compression | browser-image-compression |
-| Build | Vite |
-| Testing | Vitest + fake-indexeddb |
-| PWA | vite-plugin-pwa |
+| Domain | Technology | Purpose |
+|-------|-----------|---------|
+| **Core** | `React 18` + `TypeScript` | Strongly typed UI logic |
+| **Build** | `Vite` | Lightning fast HMR & optimized bundling |
+| **Backend** | `Supabase` (PostgreSQL) | Auth, Database, and Realtime sync |
+| **State** | `Zustand` | Atomic, cross-component UI/Cart state |
+| **Graphics** | `Three.js` + `@react-three/fiber` | Voxel warehouse and analytical treemaps |
+| **Math** | `d3-hierarchy` | Calculating spatial bounds for heatmaps |
+| **PDF** | `jspdf` | Client-side catalog and invoice generation |
 
 ---
 
-## Data Model (ER Diagram)
+## 🗄️ Database Architecture (PostgreSQL)
 
-**Schema Version**: v7
+The entire application relies on Supabase **Row Level Security (RLS)**. Every table has a `firm_id` column ensuring strict multi-tenant boundaries.
 
 ```mermaid
 erDiagram
-    VERTICALS ||--o{ PRODUCTS : "categorizes"
-    VERTICALS ||--o{ BRANDS : "has"
-    PRODUCTS ||--o{ ITEMS : "is generic for"
-    BRANDS ||--o{ ITEMS : "manufactures"
-    PACKING_UNITS ||--o{ ITEMS : "defines pack size"
-    ITEMS ||--o{ ORDER_ITEMS : "appears in"
+    FIRMS ||--o{ FIRM_USERS : "employs"
+    FIRMS ||--o{ ITEMS : "owns"
+    FIRMS ||--o{ ORDERS : "processes"
+    FIRMS ||--o{ WAREHOUSE_LAYOUT : "structures"
     
-    ITEMS ||--o{ VARIANT_PARAMS_1 : "has variants"
-    ITEMS ||--o{ VARIANT_PARAMS_2 : "has variants"
-    ITEMS ||--o{ VARIANT_PARAMS_3 : "has variants"
+    ORDERS ||--o{ ORDER_ITEMS : "contains"
+    ITEMS ||--o{ ORDER_ITEMS : "sold as"
+    
+    WAREHOUSE_LAYOUT ||--o{ WAREHOUSE_CELLS : "divided into"
+    ITEMS ||--o| WAREHOUSE_CELLS : "stored in"
 
     ITEMS {
-        int id PK
-        string item_name
-        string category
-        int product_id FK
-        int brand_id FK
-        int vertical_id FK
-        int packing_unit_id FK
-        int variant_param1_id FK
-        int variant_param2_id FK
-        int variant_param3_id FK
-        
-        int p_unit "Atomic units/pack"
-        int P_unit_per_parcel "Packs/parcel"
+        uuid firm_id FK
+        text item_name
         int stock_parcels
-        int stock_units "Computed Total"
-        
         float retail_price_unit
-        float retail_price_container
-        float wholesale_price_unit
-        float wholesale_price_container
-        string createdAt
     }
 
-    VARIANT_PARAMS_1 {
-        int id PK
-        string name "Pages/Count"
-        int product_id FK
-    }
-
-    VARIANT_PARAMS_2 {
-        int id PK
-        string name "Type"
-        int product_id FK
-    }
-    
-    VARIANT_PARAMS_3 {
-        int id PK
-        string name "Size"
-        int product_id FK
-    }
-
-    ORDER_ITEMS {
-        int id PK
-        int order_id FK
-        int item_id FK
-        string item_name
-        int qty
-        float unit_price
-        float discount
-        float total
-    }
-
-    BILLS {
-        int id PK
-        int order_id FK
-        string bill_number
-        string business_name
-        string print_format
-    }
-
-    PROSPECTS {
-        int id PK
-        string prospectname
-        string area_town
-        string contact
-        string business_type
+    ORDERS {
+        uuid firm_id FK
+        text status
+        float grand_total
     }
 ```
 
 ---
 
-## State Management Architecture
+## 🏎️ State & Rendering Pipeline
+
+To handle thousands of inventory items without browser lag, VisualOS avoids heavy generic table libraries. 
 
 ```mermaid
-graph TB
-    subgraph "Zustand Store"
-        CS["Cart Slice<br/>cartItems, pricingMode,<br/>selectedProspect, tax, discount"]
-        UI["UI Slice<br/>sidebar, modal, toasts,<br/>activeBusiness"]
-        MS["Media Slice<br/>ffmpegProgress,<br/>isProcessing"]
-    end
-
-    CS -->|"getSubtotal()"| BILLING[Billing Page]
-    CS -->|"getGrandTotal()"| BILLING
-    CS -->|"setPricingMode()"| BILLING
-    UI -->|"addToast()"| TOAST[Toast Container]
-    UI -->|"activeBusiness"| DASH[Dashboard]
-    UI -->|"activeBusiness"| PRICELIST[Price List]
-    MS -->|"progress"| MEDIA[Media Page]
+graph TD
+    A[Supabase Network Request] -->|DAL Fetch| B(React Component Mounts)
+    B -->|Caches| C{Zustand Store}
+    C -->|Subscribes| D[UI Components]
+    
+    E[User Clicks Analytics] -->|Loads 10k Items| F[D3 Hierarchy Engine]
+    F -->|Calculates Math Bounds array| G[React Three Fiber Canvas]
+    G -->|<instancedMesh> render| H[Browser GPU]
 ```
 
----
-
-## Key Design Decisions
-
-1. **No backend** — IndexedDB stores everything locally for offline-first usage
-2. **4-tier pricing** — Retail/Wholesale × Piece/Pack covers all B2B and B2C scenarios
-3. **Items vs Products** — `items` are individual SKUs; `products` are generic names for grouping
-4. **Lightweight Inventory table** — Custom sort/filter/group instead of `@tanstack/react-table` to avoid browser freeze on large datasets
-5. **Zustand slices** — Cart, UI, Media in one store for simple cross-component access
-6. **Rs. currency** — `Rs.` used everywhere instead of `₹` for PDF-safe encoding
-7. **Web Workers** — GIF generation runs in a worker to keep UI responsive
-
----
-
-## Build & Run
-
-```bash
-# Install
-npm install
-
-# Dev server
-npm run dev
-
-# Build for production
-npm run build
-
-# Run tests
-npx vitest run
-
-# Type check
-npx tsc --noEmit
-```
-
----
-
-## Database Seeding
-
-On first run, the database auto-seeds:
-
-| Table | Seed Data |
-|-------|-----------|
-| verticals | Stationery, Cutlery, Fireworks, FMCG |
-| brands | Reegal, Prime, Supreme, Chouhan, Ashoka, Sunrise, Standard |
-| products | Notebooks, Pens, Pencils, Sky Shot, Flower Pot, Spoons, Plates, Soap, Detergent |
-| packing_units | piece (×1), dozen (×12), box of 5 (×5), bundle of 10 (×10), carton of 20 (×20) |
-| business_config | R.S. Enterprises (active), Kartik Traders, Kailash Cutlery |
+### 🧠 Core Design Tenets
+1. **Client-Side Heavy, Server-Side Dumb:** Supabase acts exclusively as a secure data-store. All PDF generation, CSV parsing, math aggregations, and visual calculations happen on the user's local CPU/GPU saving massive server costs.
+2. **Immutable React State:** Zustand is used to prevent prop-drilling, but database data is fetched fresh via the DAL to ensure the PWA doesn't desync from truth.
+3. **React 18 Strict Compatibility:** 3rd party rendering libraries (like `@react-three/drei`) are strictly version-locked to guarantee Reconciler stability.

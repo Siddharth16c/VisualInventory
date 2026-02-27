@@ -23,18 +23,21 @@ export default function PrintHandler({ order, items, onClose }: PrintHandlerProp
     const addToast = useAppStore((s) => s.addToast);
 
     // Fetch variants for display
-    const variants = useLiveQuery(() => db.variant_params_1.toArray()) || [];
+    const variants = useLiveQuery(() => db.variant_params_1.toArray()) || ([] as any[]);
     const variantMap = new Map<number, string>();
     variants.forEach(v => variantMap.set(v.id!, v.name));
 
+    const isQuote = order.status === 'quote';
+    const label = isQuote ? 'Quote' : 'Invoice';
+
     const handleA4Print = useReactToPrint({
         contentRef: a4Ref,
-        documentTitle: `Invoice-${order.id}`,
+        documentTitle: `${label}-${order.id}`,
     });
 
     const handleThermalPrint = useReactToPrint({
         contentRef: thermalRef,
-        documentTitle: `Thermal-${order.id}`,
+        documentTitle: `Thermal-${label}-${order.id}`,
     });
 
     // Generate thermal-compatible PDF for RawBT
@@ -53,7 +56,7 @@ export default function PrintHandler({ order, items, onClose }: PrintHandlerProp
             doc.text('VisualOS Store', pw / 2, y, { align: 'center' });
             y += lh + 1;
             doc.setFontSize(8);
-            doc.text(`Invoice #${order.id}`, pw / 2, y, { align: 'center' });
+            doc.text(`${label} #${order.id}`, pw / 2, y, { align: 'center' });
             y += lh;
             doc.text(new Date(order.order_date).toLocaleString('en-IN'), pw / 2, y, { align: 'center' });
             y += lh + 2;
@@ -121,7 +124,7 @@ export default function PrintHandler({ order, items, onClose }: PrintHandlerProp
             const trimmedDoc = new jsPDF({ unit: 'mm', format: [58, y + 10] });
             trimmedDoc.setFont('Courier', 'normal');
             // Re-render on trimmed page (simpler: just save original)
-            doc.save(`thermal-invoice-${order.id}.pdf`);
+            doc.save(`thermal-${label.toLowerCase()}-${order.id}.pdf`);
             addToast('Thermal PDF generated! Open with RawBT', 'success');
         } catch (e) {
             addToast('Failed to generate thermal PDF', 'error');
@@ -132,7 +135,7 @@ export default function PrintHandler({ order, items, onClose }: PrintHandlerProp
         try {
             const doc = new jsPDF();
             doc.setFontSize(18);
-            doc.text(`Invoice #${order.id}`, 20, 20);
+            doc.text(`${label} #${order.id}`, 20, 20);
             doc.setFontSize(12);
             doc.text(`Date: ${new Date(order.order_date).toLocaleDateString('en-IN')}`, 20, 30);
             doc.text(`Customer: ${order.prospect_name}`, 20, 38);
@@ -145,8 +148,8 @@ export default function PrintHandler({ order, items, onClose }: PrintHandlerProp
             });
 
             const blob = doc.output('blob');
-            const file = new File([blob], `invoice-${order.id}.pdf`, { type: 'application/pdf' });
-            await shareFile(file, `Invoice #${order.id} — Rs.${order.grand_total.toFixed(2)}`);
+            const file = new File([blob], `${label.toLowerCase()}-${order.id}.pdf`, { type: 'application/pdf' });
+            await shareFile(file, `${label} #${order.id} — Rs.${order.grand_total.toFixed(2)}`);
         } catch (e) {
             addToast('Share failed', 'error');
         }
@@ -156,7 +159,7 @@ export default function PrintHandler({ order, items, onClose }: PrintHandlerProp
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex flex-col">
             {/* Toolbar */}
             <div className="bg-white flex items-center justify-between px-4 py-3 border-b border-surface-200 shadow-sm">
-                <h3 className="text-sm font-semibold text-surface-900">Invoice #{order.id}</h3>
+                <h3 className="text-sm font-semibold text-surface-900">{label} #{order.id}</h3>
                 <div className="flex items-center gap-2">
                     <button onClick={() => handleA4Print()} className="btn-primary text-xs flex items-center gap-1.5">
                         <Printer className="h-3.5 w-3.5" /> A4 Print

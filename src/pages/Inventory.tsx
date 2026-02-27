@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Item } from '@/db/dexie';
 import { useAppStore } from '@/store/store';
-import { Plus, Pencil, Trash2, Search, ChevronRight, ChevronDown, X, Package } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, ChevronRight, ChevronDown, X, Package, Upload } from 'lucide-react';
+import BulkInsertModal from '@/components/BulkInsertModal';
 
 // ─── Inline quick-add for static tables ──────────────────────────
 
@@ -454,6 +455,7 @@ export default function Inventory() {
     const addToast = useAppStore((s) => s.addToast);
 
     const [showModal, setShowModal] = useState(false);
+    const [showBulkInsert, setShowBulkInsert] = useState(false);
     const [editItem, setEditItem] = useState<Item | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [sortKey, setSortKey] = useState<SortKey>('item_name');
@@ -674,6 +676,12 @@ export default function Inventory() {
                         {groupByProduct ? 'Ungroup' : 'Group by Product'}
                     </button>
                     <button
+                        onClick={() => setShowBulkInsert(true)}
+                        className="btn-secondary text-sm flex items-center gap-2"
+                    >
+                        <Upload className="h-4 w-4" /> Bulk Insert
+                    </button>
+                    <button
                         onClick={() => { setEditItem(null); setShowModal(true); }}
                         className="btn-primary text-sm flex items-center gap-2"
                     >
@@ -751,6 +759,12 @@ export default function Inventory() {
                 <ItemModal
                     item={editItem}
                     onClose={() => { setShowModal(false); setEditItem(null); }}
+                />
+            )}
+            {showBulkInsert && (
+                <BulkInsertModal
+                    onClose={() => setShowBulkInsert(false)}
+                    onSuccess={() => setShowBulkInsert(false)}
                 />
             )}
         </div>

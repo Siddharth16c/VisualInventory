@@ -124,7 +124,7 @@ export default function PriceList() {
             doc.text('Variant', 100, y);
             doc.text('Unit Price', 128, y);
             doc.text('Pkg Price', 155, y);
-            doc.text('Units/Parcel', 180, y);
+            doc.text('p_unit/Parcel', 180, y);
             y += 8;
             doc.setTextColor(0, 0, 0);
             doc.setFont('helvetica', 'normal');
@@ -170,7 +170,7 @@ export default function PriceList() {
                 doc.text(variant.substring(0, 12), 100, y);
                 doc.text(`Rs.${unitP.toFixed(2)}`, 128, y);
                 doc.text(`Rs.${containerP.toFixed(2)}`, 155, y);
-                doc.text(`${item.P_unit_per_parcel}`, 180, y);
+                doc.text(`${item.p_unit} x ${item.P_unit_per_parcel}`, 180, y);
                 y += 7;
             });
 
@@ -290,7 +290,7 @@ export default function PriceList() {
                                         <p className="text-xs text-surface-400">
                                             {item.variant_param1_id && `${vp1Map.get(item.variant_param1_id) || ''} · `}
                                             {brand && `${brand} · `}
-                                            {puName && `${item.P_unit_per_parcel} ${puName}`}
+                                            {puName && `${item.p_unit}x${item.P_unit_per_parcel} ${puName}`}
                                         </p>
                                     </div>
                                     <div className="text-right text-xs flex-shrink-0">

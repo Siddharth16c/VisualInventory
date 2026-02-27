@@ -1,80 +1,59 @@
-# Deploying to Netlify
+# 🚀 VisualOS — Deployment Guide
 
-## Why Netlify?
-- **No credit card required** — Completely free tier signup
-- **Won't charge without asking** — Stops serving when limits hit, never auto-charges
-- **Free tier**: 100 GB bandwidth/month, 300 build minutes/month
-- **Automatic HTTPS** and custom domain support
+> [!IMPORTANT]  
+> VisualOS is a modern React SPA powered by a **Supabase** backend. To deploy this application, you must configure both the frontend host (like Netlify or Vercel) and the backend database.
 
 ---
 
-## Option A: Deploy from Git (Recommended)
+## 🏗️ Step 1: Backend Deployment (Supabase)
 
-1. **Push your code to GitHub/GitLab/Bitbucket**
+1. Create a new project at [Supabase.com](https://supabase.com/).
+2. Navigate to the **SQL Editor**.
+3. Copy the contents of `docs/supabase_schema.sql` and run it. This script automatically:
+   - Creates all tables (`firms`, `items`, `orders`, etc.)
+   - Enables **Row Level Security (RLS)** for multi-tenant data isolation.
+   - Creates the necessary triggers for inventory management.
+4. Go to **Project Settings → API** and copy your `Project URL` and `anon public key`.
+
+---
+
+## 🌐 Step 2: Frontend Deployment (Netlify)
+
+> [!TIP]  
+> Netlify is recommended as it provides free automatic HTTPS, unmetered edge caching, and seamless continuous integration from GitHub.
+
+1. **Push your code to GitHub/GitLab**
    ```bash
-   git init
    git add .
-   git commit -m "Initial commit"
-   git remote add origin https://github.com/YOUR_USERNAME/InventoryManagementSystem.git
+   git commit -m "Ready for production"
    git push -u origin main
    ```
 
-2. **Go to [netlify.com](https://app.netlify.com/signup)** and sign up with GitHub (no card needed)
+2. **Connect to Netlify**
+   - Go to [netlify.com](https://app.netlify.com/signup)
+   - Click **"Add new site" → "Import an existing project"**
+   - Select your repository.
 
-3. **Click "Add new site" → "Import an existing project"**
+3. **Configure Build Settings**
+   - **Build command:** `npm run build`
+   - **Publish directory:** `dist`
 
-4. **Select your repository** and confirm these auto-detected settings:
-   - Build command: `npm run build`
-   - Publish directory: `dist`
+### 🔒 Step 3: Environment Variables
+Before clicking deploy, you **MUST** add your Supabase credentials to Netlify's environment variables:
 
-5. **Click Deploy** — Netlify will build and give you a URL like `https://your-site-name.netlify.app`
+| Key | Value |
+|-----|-------|
+| `VITE_SUPABASE_URL` | `https://your-project.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | `your-anon-key-string` |
 
-6. **Auto-deploy**: Every `git push` to `main` will auto-deploy!
-
----
-
-## Option B: Manual Deploy (No Git Needed)
-
-1. **Build locally**:
-   ```bash
-   npm run build
-   ```
-
-2. **Go to [app.netlify.com](https://app.netlify.com)**
-
-3. **Drag and drop** the `dist/` folder onto the Netlify dashboard
-
-4. Done! Your site is live.
+4. **Click Deploy** — Netlify will build the app and provide a live URL!
 
 ---
 
-## Configuration
-
-The `netlify.toml` file in the project root handles:
-- **Build command**: `npm run build` (runs `tsc --noEmit && vite build`)
-- **Publish directory**: `dist` (Vite output)
-- **SPA redirect**: All routes → `index.html` (for React Router)
-
----
-
-## Custom Domain (Optional)
-
-1. Go to **Site settings → Domain management**
-2. Add your custom domain
-3. Netlify provides free SSL automatically
-
----
-
-## Environment
-
-No environment variables are needed — the app is fully client-side with IndexedDB.
-
----
-
-## Troubleshooting
+## 🛠️ Troubleshooting
 
 | Issue | Solution |
 |-------|---------|
-| Build fails | Run `npm run build` locally first to check |
-| Routes 404 | The `netlify.toml` redirect rule handles this |
-| Slow first load | Vite tree-shakes unused code; check bundle size with `npx vite build --report` |
+| **Blank Screen / 404** | The `netlify.toml` handles SPA routing. Ensure it exists in the root directory. |
+| **Network Errors on Login** | Your Supabase environment variables are missing or incorrect in Netlify settings. |
+| **Missing Icons/Styles** | Ensure your `vite.config.ts` has the correct `base` path if not deployed to a root domain. |

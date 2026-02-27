@@ -1,123 +1,55 @@
-# VisualOS Inventory Management System — Functional Documentation
+# 🎯 VisualOS — Functional Specification
 
-## Overview
-
-VisualOS is a cross-business inventory management PWA designed for managing stock, billing, and accounting across multiple business verticals (Stationery, Cutlery, Fireworks, FMCG). It runs entirely in the browser via IndexedDB — no server required.
+> [!NOTE]  
+> VisualOS is a multi-tenant, cloud-synced SaaS application designed for wholesale and retail inventory management, CRM, and spatial warehouse logistics.
 
 ---
 
-## Navigation
+## 🗺️ Navigation & Modules
 
-| Page | Purpose |
+| Module | Core Purpose |
 |------|---------|
-| Dashboard | At-a-glance KPIs — item count, low stock alerts, recent orders, revenue |
-| Inventory | CRUD items with search, sort, group, and 4-tier pricing |
-| Billing | Build cart, switch Bulk/Lean pricing, create orders, track payments |
-| Price List | Select items → generate branded PDF price lists |
-| Accounting | Month-wise revenue, costs, profit, and cost entry management |
-| Prospects | Customer/prospect CRM — name, area, contact, notes |
-| Routes | Visit logs and travel records linked to prospects |
-| Media | Item image gallery with compression and GIF generation |
-| Maintenance | Database backup/restore, storage usage |
+| **Dashboard** | At-a-glance KPIs — item count, dynamic low stock alerts, recent transactions. |
+| **Inventory** | Master SKU matrix. Manage items across multiple hierarchical layers (Vertical → Brand → Product). |
+| **Billing (POS)** | Point of Sale interface. Switch between `Bulk` (Wholesale) and `Lean` (Retail) pricing instantly. |
+| **Warehouse (Voxel)** | spatial 2D/3D representation of physical racks, bins, and parcels for visual picking/packing. |
+| **Analytics (Treemap)** | Hierarchical WebGL treemaps depicting nested revenue and cost geometry visually. |
+| **Prospects CRM** | Client directory mapped to geographical areas and business types. |
+| **Price Lists** | Generate heavily branded, tabular PDF catalogs directly in the browser. |
 
 ---
 
-## Feature Details
+## ✨ Core Feature Nuances
 
-### 1. Inventory Management
+### 📦 1. 3-Tier Volumetric Stock
+VisualOS abandons simple "quantity" integers for a realistic volumetric model:
+1. **P_unit:** The atomic unit (e.g., 1 Pencil).
+2. **P_unit_per_parcel:** The box scale (e.g., 50 Pencils per Box).
+3. **Stock Parcels:** Physical boxes in the warehouse.
 
-- **Add/Edit/Delete items** with advanced schema:
-    - **Variants**: Pages/Count (VP1), Type (VP2), Size (VP3)
-    - **3-Tier Stock**: 
-        - Atomic Unit (e.g. 1 pc)
-        - Packing Unit (e.g. 12 pcs/dozen)
-        - Parcel Unit (e.g. 15 dozens/carton)
-- **Cascading dropdowns**: Category → Product, Brand filtered by vertical
-- **4-tier pricing**: Retail per-piece, Retail per-pack, Wholesale per-piece, Wholesale per-pack
-- **Search**: Fuzzy search across item name, category, variants
-- **Sort**: Click any column header to sort ascending/descending
-- **Group by Product**: Toggle to collapse items under their generic product name
-- **Low stock highlighting**: Items with ≤10 qty shown in red
+*When a sale is made, the engine calculates the atomic deduction and correctly reduces physical parcel counts.*
 
-### 2. Billing
+### 🏢 2. Multi-Tenant Firm Isolation
+Unlike single-database apps, VisualOS is designed for Franchises. 
+- A single user account can access **Firm A (Master)** and **Firm B (Retail Branch)**.
+- Supabase **Row Level Security (RLS)** guarantees that when logged into Firm B, it is mathematically impossible to query Firm A's inventory or sales data.
 
-- **Pricing Mode Toggle**: Switch between `Lean (Retail)` and `Bulk (Wholesale)`
-- **Saved Bills**: View, reprint, or share previously generated bills
-- **Editable prices**: Override per-item price for the current bill
-- **Cart management**: Add items, adjust qty, apply discounts per line
-- **Payment tracking**: Enter paid amount → system computes due, sets status
-- **Print options**: A4, Thermal, RawBT, PDF download
-- **Stock deduction**: Automatically deducts from stock based on 3-tier logic
-
-### 3. Catalogue Builder (New)
-
-- **Interactive Flipbook**: Generate a professional HTML flipbook catalog
-- **Advanced Filtering**: Filter by Vertical, Brand, Product, and Variants
-- **Draft Mode**: Select items, reorder them, and preview before generating
-- **Sharing**: 
-    - **Download HTML**: Self-contained file, works offline
-    - **Share**: via Web Share API (mobile)
-- **Media**: Displays item images and sets
-
-### 4. Price List
-
-- **Select items** to include in a price list via checkboxes
-- **Columns**: #, Item Name, Brand, Variant, Unit Price, Pack Price, **Units/Parcel**
-- **Generate PDF** with business branding
-
-### 5. Accounting
-
-- **Monthly filter** via month picker
-- **KPI cards**: Revenue, Costs, Profit (with margin %)
-- **Cost entries**: Add/delete with type, business, description, amount
-- **Order revenue table**: Shows order totals and due amounts
-
-### 6. Prospects CRM
-
-- **Add prospects**: Name, area/town, contact, business type, notes
-- **Search and filter** by name or area
-- **Edit/Delete** with confirmation
-
-### 7. Routes
-
-- **Visit log**: Record visits to prospects with outcome notes
-- **Travel records**: Log travel with route, date, ideal flag, and notes
-
-### 8. Media
-
-- **Upload images** to items (auto-compressed)
-- **Image gallery** per item
-- **Generate GIF** from multiple images
-
-### 9. Maintenance
-
-- **Reference Data**: Manage Verticals, Products, Brands, Packing Units, and Variants (1, 2, 3)
-- **Export backup**: JSON dump of all tables
-- **Import backup**: Restore full database state
-- **Storage info**: Shows used/available IndexedDB quota
+### 🎨 3. Fallback Rendering (WebGL → DOM)
+High-end desktop users get beautiful `@react-three/fiber` 3D visualizations for Analytics and Warehouse management. If accessed on a low-end mobile device, the system gracefully degrades to CSS-Grid or DOM-based lists to preserve battery and maintain 60FPS.
 
 ---
 
-## configuration
+## 💳 Billing Lifecycle
 
-The system ships with 3 pre-configured businesses (manageable via UI):
-1. **R.S. Enterprises** (Active)
-2. **Kartik Traders**
-3. **Kailash Cutlery**
-
-Features can be toggled per business.
-
----
-
-## Pricing & Stock Model
-
-### Stock Logic (3-Tier)
-1. **P_unit**: Atomic units per package (e.g., 12 for a Dozen)
-2. **P_unit_per_parcel**: Packages per outer parcel (e.g., 20 dozens per Carton)
-3. **Stock Parcels**: Physical count of outer parcels
--> **Total Stock Units** = `P_unit` × `P_unit_per_parcel` × `Stock Parcels`
-
-### Pricing
-- **Retail (Lean)**: Unit Price / Container Price
-- **Wholesale (Bulk)**: Unit Price / Container Price
-
+```mermaid
+stateDiagram-v2
+    [*] --> Cart_Building
+    Cart_Building --> Checkout
+    Checkout --> Pending_Payment
+    Pending_Payment --> Dispatched : Full Payment Received
+    Pending_Payment --> Partial_Due : Partial Payment
+    Dispatched --> [*]
+```
+- **Cart Building:** Sales reps scan or search items, adjusting quantities.
+- **Dynamic Pricing:** Prices auto-shift based on the prospect's tier (Retail vs Wholesale).
+- **Dispatch:** Only when an order hits the `dispatched` state does the strict stock mutation trigger.

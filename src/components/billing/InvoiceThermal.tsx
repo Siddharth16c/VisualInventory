@@ -27,7 +27,7 @@ const InvoiceThermal = forwardRef<HTMLDivElement, InvoiceThermalProps>(({ order,
             {/* Header */}
             <div style={{ textAlign: 'center', borderBottom: '1px dashed #000', paddingBottom: '4px', marginBottom: '4px' }}>
                 <div style={{ fontWeight: 'bold', fontSize: '13px' }}>VisualOS Store</div>
-                <div style={{ fontSize: '9px' }}>Invoice #{order.id}</div>
+                <div style={{ fontSize: '9px' }}>{order.status === 'quote' ? 'Quote' : 'Invoice'} #{order.id}</div>
                 <div style={{ fontSize: '9px' }}>{new Date(order.order_date).toLocaleString('en-IN')}</div>
             </div>
 

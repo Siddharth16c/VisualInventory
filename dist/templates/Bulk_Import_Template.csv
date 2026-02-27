@@ -1,0 +1,3 @@
+Item Name,Category,Product Name,Vertical,Brand Name,Packing Unit,Packs Per Parcel,Units Per Pack,Stock Parcels,Retail Price (Unit),Wholesale Price (Unit),Maximum Retail Price (MRP),Variant 1 (Size/Count),Variant 2 (Type),Image Location/Path
+Test Notebook 200pg,Stationery,Notebooks,Stationery,Apsara,dozen,10,12,50,45.00,40.00,50.00,200 Pages,Ruled,C:\images\notebook.jpg
+Red Pen Box,Stationery,Pens,Stationery,Reynolds,box of 5,20,5,100,25.00,22.00,30.00,Red Ink,Ballpoint,

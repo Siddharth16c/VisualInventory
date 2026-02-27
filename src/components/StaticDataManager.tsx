@@ -56,7 +56,7 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                     name: 'vertical_id', label: 'Vertical', type: 'select',
                     options: async () => {
                         const verts = await db.verticals.toArray();
-                        return verts.map((v) => ({ value: v.id!, label: v.name }));
+                        return verts.map((v: any) => ({ value: v.id!, label: v.name }));
                     },
                 },
             ],
@@ -88,7 +88,7 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                     name: 'vertical_id', label: 'Vertical', type: 'select',
                     options: async () => {
                         const verts = await db.verticals.toArray();
-                        return verts.map((v) => ({ value: v.id!, label: v.name }));
+                        return verts.map((v: any) => ({ value: v.id!, label: v.name }));
                     },
                 },
             ],
@@ -106,7 +106,7 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                     name: 'product_id', label: 'Product', type: 'select',
                     options: async () => {
                         const prods = await db.products.toArray();
-                        return prods.map((p) => ({ value: p.id!, label: p.name }));
+                        return prods.map((p: any) => ({ value: p.id!, label: p.name }));
                     },
                 },
             ],
@@ -124,7 +124,7 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                     name: 'product_id', label: 'Product', type: 'select',
                     options: async () => {
                         const prods = await db.products.toArray();
-                        return prods.map((p) => ({ value: p.id!, label: p.name }));
+                        return prods.map((p: any) => ({ value: p.id!, label: p.name }));
                     },
                 },
             ],
@@ -142,7 +142,7 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                     name: 'product_id', label: 'Product', type: 'select',
                     options: async () => {
                         const prods = await db.products.toArray();
-                        return prods.map((p) => ({ value: p.id!, label: p.name }));
+                        return prods.map((p: any) => ({ value: p.id!, label: p.name }));
                     },
                 },
             ],
@@ -210,7 +210,11 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
         const data = { ...form };
         config.fields.forEach((f) => {
             if (f.type === 'number') data[f.name] = Number(data[f.name]) || 0;
-            if (f.type === 'select') data[f.name] = Number(data[f.name]) || 0;
+            if (f.type === 'select') {
+                const val = Number(data[f.name]);
+                if (val) data[f.name] = val;
+                else delete data[f.name]; // Save undefined so generic relations don't falsely map to 0
+            }
         });
 
         try {
@@ -352,15 +356,15 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                                             <div className="flex gap-1">
                                                 <button
                                                     onClick={() => startEdit(row)}
-                                                    className="p-1.5 hover:bg-surface-200 rounded-lg transition-colors"
+                                                    className="p-1.5 hover:bg-surface-100 rounded-lg transition-colors"
                                                 >
                                                     <Pencil className="h-3.5 w-3.5 text-surface-500" />
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(row.id)}
-                                                    className="p-1.5 hover:bg-red-900/30 rounded-lg transition-colors"
+                                                    className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
                                                 >
-                                                    <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                                                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
                                                 </button>
                                             </div>
                                         </td>

@@ -40,6 +40,7 @@ interface UISlice {
     activeModal: string | null;
     toasts: Array<{ id: string; message: string; type: 'success' | 'error' | 'info' }>;
     activeBusiness: string;     // Current business name
+    userRole: string;
 
     toggleSidebar: () => void;
     setSidebarOpen: (open: boolean) => void;
@@ -48,6 +49,7 @@ interface UISlice {
     addToast: (message: string, type: 'success' | 'error' | 'info') => void;
     removeToast: (id: string) => void;
     setActiveBusiness: (name: string) => void;
+    setUserRole: (role: string) => void;
 }
 
 // ─── Media Slice ────────────────────────────────────────────────
@@ -165,6 +167,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     activeModal: null,
     toasts: [],
     activeBusiness: 'R.S. Enterprises',
+    userRole: 'master_admin',
 
     toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
     setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -180,6 +183,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     removeToast: (id) =>
         set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
     setActiveBusiness: (name) => set({ activeBusiness: name }),
+    setUserRole: (role) => set({ userRole: role }),
 
     // ── Media State ─────────────────────────────────────────────
     ffmpegProgress: 0,

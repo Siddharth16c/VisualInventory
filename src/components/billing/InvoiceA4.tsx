@@ -14,11 +14,11 @@ const InvoiceA4 = forwardRef<HTMLDivElement, InvoiceA4Props>(({ order, items, va
             {/* Header */}
             <div className="flex justify-between items-start border-b-2 border-gray-800 pb-4 mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">INVOICE</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">{order.status === 'quote' ? 'QUOTE' : 'INVOICE'}</h1>
                     <p className="text-sm text-gray-500 mt-1">VisualOS Inventory</p>
                 </div>
                 <div className="text-right text-sm text-gray-600">
-                    <p className="font-semibold text-gray-900">Invoice #{order.id}</p>
+                    <p className="font-semibold text-gray-900">{order.status === 'quote' ? 'Quote' : 'Invoice'} #{order.id}</p>
                     <p>Date: {new Date(order.order_date).toLocaleDateString('en-IN')}</p>
                     <p>Time: {new Date(order.order_date).toLocaleTimeString('en-IN')}</p>
                 </div>

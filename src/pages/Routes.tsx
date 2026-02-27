@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Visit, type TravelRecord } from '@/db/dexie';
 import { useAppStore } from '@/store/store';
-import { Plus, Calendar, MapPin, X, Navigation, CheckCircle } from 'lucide-react';
+import { Plus, Calendar, MapPin, X, Navigation, CheckCircle, ExternalLink } from 'lucide-react';
 
 export default function Routes_() {
-    const visits = useLiveQuery(() => db.visits.orderBy('visit_date').reverse().limit(50).toArray()) || [];
-    const travelRecords = useLiveQuery(() => db.travel_records.orderBy('travel_date').reverse().limit(50).toArray()) || [];
-    const prospects = useLiveQuery(() => db.prospects.toArray()) || [];
+    const visits = useLiveQuery(() => db.visits.orderBy('visit_date').reverse().limit(50).toArray()) || ([] as any[]);
+    const travelRecords = useLiveQuery(() => db.travel_records.orderBy('travel_date').reverse().limit(50).toArray()) || ([] as any[]);
+    const prospects = useLiveQuery(() => db.prospects.toArray()) || ([] as any[]);
     const addToast = useAppStore((s) => s.addToast);
 
     const [showVisitModal, setShowVisitModal] = useState(false);
@@ -35,6 +35,22 @@ export default function Routes_() {
         await db.visits.add(visitForm as Visit);
         addToast('Visit logged', 'success');
         setShowVisitModal(false);
+    };
+
+    const openGoogleMapsForRoute = (routeId: number) => {
+        // Collect distinct towns/areas for prospects on this route
+        const routeProspects = prospects.filter(p => p.route_id === routeId);
+        const towns = Array.from(new Set(routeProspects.map(p => p.area_town).filter(Boolean)));
+
+        if (towns.length === 0) {
+            addToast('No prospect towns found on this route.', 'info');
+            return;
+        }
+
+        // Create a directions URL
+        // Format: https://www.google.com/maps/dir/TownA/TownB/TownC
+        const mapUrl = `https://www.google.com/maps/dir/${towns.map(t => encodeURIComponent(t)).join('/')}`;
+        window.open(mapUrl, '_blank');
     };
 
     const handleSaveTravel = async () => {
@@ -103,6 +119,15 @@ export default function Routes_() {
                                         </div>
                                         {t.is_ideal && (
                                             <span className="badge-success"><CheckCircle className="h-3 w-3" /> Ideal</span>
+                                        )}
+                                        {t.route_id && (
+                                            <button
+                                                onClick={() => openGoogleMapsForRoute(t.route_id)}
+                                                className="btn-ghost p-1.5 ml-2 text-brand-600 hover:bg-brand-50"
+                                                title="Open Route in Google Maps"
+                                            >
+                                                <ExternalLink className="h-4 w-4" />
+                                            </button>
                                         )}
                                     </div>
                                 </div>

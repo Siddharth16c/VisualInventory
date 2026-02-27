@@ -62,8 +62,8 @@ export default function Media() {
                 setFFmpegProgress(((i + 1) / files.length) * 100);
                 setProcessingMessage(`Compressing ${i + 1}/${files.length}...`);
 
-                // Compress if image
-                if (file.type.startsWith('image/')) {
+                // Compress if image (but NOT gifs, which break animation when compressed)
+                if (file.type.startsWith('image/') && file.type !== 'image/gif') {
                     const compressed = await imageCompression(file, {
                         maxSizeMB: 1,
                         maxWidthOrHeight: 1920,

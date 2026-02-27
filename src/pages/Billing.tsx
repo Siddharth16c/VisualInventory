@@ -117,7 +117,7 @@ export default function Billing() {
         }
     };
 
-    const handleCreateOrder = async () => {
+    const handleCreateOrder = async (isQuote: boolean = false) => {
         if (cartItems.length === 0) {
             addToast('Cart is empty', 'error');
             return;
@@ -128,7 +128,7 @@ export default function Billing() {
             prospect_name: selectedProspect?.prospectname || 'Walk-in Customer',
             order_date: new Date().toISOString(),
             pricing_mode: pricingMode,
-            status: 'pending',
+            status: isQuote ? 'quote' : 'pending',
             subtotal,
             tax_amount: taxAmt,
             discount_amount: globalDiscount,
@@ -154,27 +154,30 @@ export default function Billing() {
         }));
         await db.order_items.bulkAdd(orderItems);
 
-        // Deduct stock (parcels)
-        for (const ci of cartItems) {
-            const current = await db.items.get(ci.item.id!);
-            if (current) {
-                const newParcels = Math.max(0, current.stock_parcels - ci.qty);
-                await db.items.update(ci.item.id!, {
-                    stock_parcels: newParcels,
-                    stock_units: current.p_unit * current.P_unit_per_parcel * newParcels,
-                });
+        let finalBillNumber = '';
+        if (!isQuote) {
+            // Deduct stock (parcels)
+            for (const ci of cartItems) {
+                const current = await db.items.get(ci.item.id!);
+                if (current) {
+                    const newParcels = Math.max(0, current.stock_parcels - ci.qty);
+                    await db.items.update(ci.item.id!, {
+                        stock_parcels: newParcels,
+                        stock_units: current.p_unit * current.P_unit_per_parcel * newParcels,
+                    });
+                }
             }
-        }
 
-        // Save bill record
-        const billNumber = `INV-${new Date().getFullYear()}-${String(orderId).padStart(4, '0')}`;
-        await db.bills.add({
-            order_id: orderId as number,
-            bill_number: billNumber,
-            business_name: activeBusiness,
-            print_format: printFormat,
-            createdAt: new Date().toISOString(),
-        });
+            // Save bill record
+            finalBillNumber = `INV-${new Date().getFullYear()}-${String(orderId).padStart(4, '0')}`;
+            await db.bills.add({
+                order_id: orderId as number,
+                bill_number: finalBillNumber,
+                business_name: activeBusiness,
+                print_format: printFormat,
+                createdAt: new Date().toISOString(),
+            });
+        }
 
         // Show PrintHandler with the saved data
         const savedOrder: Order = { ...order, id: orderId as number };
@@ -183,7 +186,8 @@ export default function Billing() {
         setPrintCartItems(savedCartItems);
         setShowPrintHandler(true);
 
-        addToast(`Order #${orderId} created — ${billNumber}`, 'success');
+        const successMsg = isQuote ? `Quote #${orderId} created successfully` : `Order #${orderId} created — ${finalBillNumber}`;
+        addToast(successMsg, 'success');
         clearCart();
         setPaidAmount('');
     };
@@ -213,6 +217,37 @@ export default function Billing() {
     const handleUpdateStatus = async (orderId: number, status: 'quote' | 'pending' | 'dispatched' | 'delivered' | 'cancelled') => {
         await db.orders.update(orderId, { status });
         addToast(`Order #${orderId} → ${status}`, 'success');
+    };
+
+    const handleConfirmQuote = async (order: Order) => {
+        if (!confirm('Convert this Quote to a Confirmed Bill? This will deduct inventory.')) return;
+
+        // Fetch order items to deduct stock
+        const orderItems = await db.order_items.where('order_id').equals(order.id!).toArray();
+        for (const oi of orderItems) {
+            const current = await db.items.get(oi.item_id);
+            if (current) {
+                const newParcels = Math.max(0, current.stock_parcels - oi.qty);
+                await db.items.update(oi.item_id, {
+                    stock_parcels: newParcels,
+                    stock_units: current.p_unit * current.P_unit_per_parcel * newParcels,
+                });
+            }
+        }
+
+        // Create bill
+        const billNumber = `INV-${new Date().getFullYear()}-${String(order.id).padStart(4, '0')}`;
+        await db.bills.add({
+            order_id: order.id!,
+            bill_number: billNumber,
+            business_name: activeBusiness || 'My Business',
+            print_format: printFormat,
+            createdAt: new Date().toISOString(),
+        });
+
+        // Update order status
+        await db.orders.update(order.id!, { status: 'pending' });
+        addToast(`Quote converted to Bill ${billNumber}`, 'success');
     };
 
     return (
@@ -519,14 +554,24 @@ export default function Billing() {
                             </div>
                         </div>
 
-                        <button
-                            onClick={handleCreateOrder}
-                            disabled={cartItems.length === 0}
-                            className="btn-primary w-full py-3 text-base flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                            <Printer className="h-5 w-5" />
-                            Create Bill & Print
-                        </button>
+                        <div className="flex gap-2 mt-4">
+                            <button
+                                onClick={() => handleCreateOrder(true)}
+                                disabled={cartItems.length === 0}
+                                className="btn-secondary flex-1 py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <FileText className="h-4 w-4" />
+                                Save Quote
+                            </button>
+                            <button
+                                onClick={() => handleCreateOrder(false)}
+                                disabled={cartItems.length === 0}
+                                className="btn-primary flex-1 py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <Printer className="h-4 w-4" />
+                                Save & Print
+                            </button>
+                        </div>
                     </div>
                 </div>
             ) : (
@@ -587,6 +632,14 @@ export default function Billing() {
                                         >
                                             <Printer className="h-3.5 w-3.5" /> Print/Share
                                         </button>
+                                        {order.status === 'quote' && (
+                                            <button
+                                                onClick={() => handleConfirmQuote(order)}
+                                                className="btn-primary text-xs flex items-center gap-1.5"
+                                            >
+                                                <CheckCircle className="h-3.5 w-3.5" /> Confirm Bill
+                                            </button>
+                                        )}
                                         {order.status === 'pending' && (
                                             <button
                                                 onClick={() => handleUpdateStatus(order.id!, 'dispatched')}

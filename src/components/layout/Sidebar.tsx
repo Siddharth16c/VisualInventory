@@ -12,6 +12,13 @@ import {
     Settings,
     X,
     Boxes,
+    Warehouse as WHIcon,
+    Truck,
+    Database,
+    BarChart,
+    BookOpen,
+    PieChart,
+    Columns
 } from 'lucide-react';
 
 const navItems = [
@@ -24,6 +31,13 @@ const navItems = [
     { to: '/accounting', icon: TrendingUp, label: 'Accounting' },
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/catalogue', icon: Boxes, label: 'Catalogue' },
+    { to: '/warehouse', icon: WHIcon, label: 'Warehouse' },
+    { to: '/suppliers', icon: Truck, label: 'Suppliers' },
+    { to: '/dbeditor', icon: Database, label: 'DB Editor' },
+    { to: '/reports', icon: BarChart, label: 'Reports' },
+    { to: '/analytics', icon: PieChart, label: 'Analytics' },
+    { to: '/docs', icon: BookOpen, label: 'Docs' },
+    { to: '/splitviewer', icon: Columns, label: 'Split Viewer' },
     { to: '/maintenance', icon: Settings, label: 'Maintenance' },
 ];
 

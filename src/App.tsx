@@ -4,6 +4,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import MobileNav from '@/components/layout/MobileNav';
 import ToastContainer from '@/components/ui/ToastContainer';
+import AutoBackup from '@/components/AutoBackup';
 import Dashboard from '@/pages/Dashboard';
 import Inventory from '@/pages/Inventory';
 import Billing from '@/pages/Billing';
@@ -14,6 +15,13 @@ import Routes_ from '@/pages/Routes';
 import Accounting from '@/pages/Accounting';
 import Maintenance from '@/pages/Maintenance';
 import Catalogue from '@/pages/Catalogue';
+import Warehouse from '@/pages/Warehouse';
+import Suppliers from '@/pages/Suppliers';
+import DBEditor from '@/pages/DBEditor';
+import Reports from '@/pages/Reports';
+import Docs from '@/pages/Docs';
+import Analytics from '@/pages/Analytics';
+import SplitViewer from '@/pages/SplitViewer';
 
 export default function App() {
     const sidebarOpen = useAppStore((s) => s.sidebarOpen);
@@ -48,13 +56,21 @@ export default function App() {
                         <Route path="/accounting" element={<Accounting />} />
                         <Route path="/catalogue" element={<Catalogue />} />
                         <Route path="/maintenance" element={<Maintenance />} />
+                        <Route path="/warehouse" element={<Warehouse />} />
+                        <Route path="/suppliers" element={<Suppliers />} />
+                        <Route path="/dbeditor" element={<DBEditor />} />
+                        <Route path="/reports" element={<Reports />} />
+                        <Route path="/docs" element={<Docs />} />
+                        <Route path="/analytics" element={<Analytics />} />
+                        <Route path="/splitviewer" element={<SplitViewer />} />
                     </Routes>
                 </div>
                 {/* Mobile Bottom Nav */}
-                <MobileNav />
+                {/*<MobileNav />*/}
             </main>
 
             <ToastContainer />
+            <AutoBackup />
         </div>
     );
 }
