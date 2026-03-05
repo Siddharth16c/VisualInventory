@@ -1,14 +1,17 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type ProductMedia, type Item } from '@/db/dexie';
+import { db, type ProductMedia } from '@/db/dexie';
+import { useSupabaseLiveQuery } from '@/hooks/useLiveQuery';
+import { DAL } from '@/db/dal';
 import { useAppStore } from '@/store/store';
 import imageCompression from 'browser-image-compression';
 import { shareFile, downloadBlob } from '@/utils/share';
 import { Upload, Image as ImageIcon, Film, Trash2, Download, Share2, Loader2, X, Type } from 'lucide-react';
 
 export default function Media() {
-    const items = useLiveQuery(() => db.items.toArray()) || [];
-    const allProducts = useLiveQuery(() => db.products.toArray()) || [];
+    // Items + products from Supabase
+    const items = useSupabaseLiveQuery(useCallback(() => DAL.items.getAll(), []), [], ['items']) as any[];
+    const allProducts = useSupabaseLiveQuery(useCallback(() => DAL.products.getAll(), []), [], ['products']) as any[];
     const addToast = useAppStore((s) => s.addToast);
     const activeBusiness = useAppStore((s) => s.activeBusiness);
     const { isProcessing, ffmpegProgress, setIsProcessing, setFFmpegProgress, setProcessingMessage, processingMessage } = useAppStore();

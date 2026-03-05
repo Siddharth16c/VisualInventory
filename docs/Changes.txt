@@ -76,3 +76,10 @@ reasoning and create a static table of unique strings of item and code assigned 
 4. Priority - visual search, visual navigation of sections, mixed/random/unorganised parcel sizes, visual stock management(CRUD), sync with tangible dynamics(any momentum in the warehouse 
 reflected by the app logic), new order placement(reasonable/rational) -> dashboard to measure/monitor/display all the metrics -> parcel dimensions/area, sections, space utilised/remaining, 
 distinguished orders in(date wise) and shipment dispatched(sales and orders)
+
+
+
+
+
+Email: admin@visualinventory.app 
+Password: Admin123!

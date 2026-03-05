@@ -1,20 +1,23 @@
-import { useState, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Item, type Order, type OrderItem, type Bill } from '@/db/dexie';
+import { useState, useMemo, useCallback } from 'react';
+import { useSupabaseLiveQuery } from '@/hooks/useLiveQuery';
+import { DAL } from '@/db/dal';
 import { useAppStore, type CartItem } from '@/store/store';
 import PrintHandler from '@/components/billing/PrintHandler';
+import { shareText } from '@/utils/share';
 import {
     Search, Plus, Minus, Trash2, Printer, ShoppingCart, User, X,
     CreditCard, Tag, FileText, Clock, CheckCircle, Truck, RotateCcw,
+    Share2, AlertCircle,
 } from 'lucide-react';
 
-type Tab = 'new' | 'saved';
+type Tab = 'new' | 'saved' | 'unpaid';
+type Order = { id?: number; prospect_id: number; prospect_name: string; order_date: string; pricing_mode: 'retail' | 'wholesale'; status: string; subtotal: number; tax_amount: number; discount_amount: number; grand_total: number; paid_amount: number; due_amount: number; payment_status: 'unpaid' | 'partial' | 'paid'; notes?: string; createdAt?: string; created_at?: string; };
 
 export default function Billing() {
-    const items = useLiveQuery(() => db.items.toArray()) || [];
-    const prospects = useLiveQuery(() => db.prospects.toArray()) || [];
-    const orders = useLiveQuery(() => db.orders.orderBy('createdAt').reverse().toArray()) || [];
-    const variants = useLiveQuery(() => db.variant_params_1.toArray()) || [];
+    const items = useSupabaseLiveQuery(useCallback(() => DAL.items.getAll(), []), [], ['items']);
+    const prospects = useSupabaseLiveQuery(useCallback(() => DAL.prospects.getAll(), []), [], ['prospects']);
+    const orders = useSupabaseLiveQuery(useCallback(() => DAL.orders.getAll(), []), [], ['orders']);
+    const variants = useSupabaseLiveQuery(useCallback(() => DAL.variant_params_1.getAll(), []), [], ['variant_params_1']);
     const addToast = useAppStore((s) => s.addToast);
     const activeBusiness = useAppStore((s) => s.activeBusiness);
 
@@ -140,49 +143,52 @@ export default function Billing() {
             createdAt: new Date().toISOString(),
         };
 
-        const orderId = await db.orders.add(order);
+        const savedOrder: any = await DAL.orders.add(order);
+        const orderId = savedOrder.id;
 
         // Save order items
-        const orderItems: Omit<OrderItem, 'id'>[] = cartItems.map((ci) => ({
-            order_id: orderId as number,
-            item_id: ci.item.id!,
-            item_name: ci.item.item_name,
-            qty: ci.qty,
-            unit_price: ci.unit_price,
-            discount: ci.discount,
-            total: ci.qty * ci.unit_price - ci.discount,
-        }));
-        await db.order_items.bulkAdd(orderItems);
+        for (const ci of cartItems) {
+            await DAL.order_items.add({
+                order_id: orderId,
+                item_id: ci.item.id!,
+                item_name: ci.item.item_name,
+                qty: ci.qty,
+                unit_price: ci.unit_price,
+                discount: ci.discount,
+                total: ci.qty * ci.unit_price - ci.discount,
+            });
+        }
 
         let finalBillNumber = '';
         if (!isQuote) {
             // Deduct stock (parcels)
             for (const ci of cartItems) {
-                const current = await db.items.get(ci.item.id!);
-                if (current) {
-                    const newParcels = Math.max(0, current.stock_parcels - ci.qty);
-                    await db.items.update(ci.item.id!, {
-                        stock_parcels: newParcels,
-                        stock_units: current.p_unit * current.P_unit_per_parcel * newParcels,
-                    });
-                }
+                try {
+                    const current = await DAL.items.getById(ci.item.id!);
+                    if (current) {
+                        const newParcels = Math.max(0, (current.stock_parcels ?? 0) - ci.qty);
+                        await DAL.items.update(ci.item.id!, {
+                            stock_parcels: newParcels,
+                            stock_units: (current.p_unit ?? 1) * (current.p_unit_per_parcel ?? 1) * newParcels,
+                        });
+                    }
+                } catch { /* item may not exist */ }
             }
 
             // Save bill record
             finalBillNumber = `INV-${new Date().getFullYear()}-${String(orderId).padStart(4, '0')}`;
-            await db.bills.add({
-                order_id: orderId as number,
+            await DAL.bills.add({
+                order_id: orderId,
                 bill_number: finalBillNumber,
                 business_name: activeBusiness,
                 print_format: printFormat,
-                createdAt: new Date().toISOString(),
             });
         }
 
         // Show PrintHandler with the saved data
-        const savedOrder: Order = { ...order, id: orderId as number };
+        const finalOrder = { ...order, id: orderId };
         const savedCartItems = [...cartItems];
-        setPrintOrder(savedOrder);
+        setPrintOrder(finalOrder as any);
         setPrintCartItems(savedCartItems);
         setShowPrintHandler(true);
 
@@ -194,19 +200,21 @@ export default function Billing() {
 
     // Open print handler for a saved order
     const handleOpenSavedBill = async (order: Order) => {
-        const orderItemsData = await db.order_items.where('order_id').equals(order.id!).toArray();
+        const orderItemsData = await DAL.order_items.getByOrder(order.id!);
         // Convert order items back to CartItem format
         const cartItemsFromOrder: CartItem[] = [];
-        for (const oi of orderItemsData) {
-            const item = await db.items.get(oi.item_id);
-            if (item) {
-                cartItemsFromOrder.push({
-                    item,
-                    qty: oi.qty,
-                    unit_price: oi.unit_price,
-                    discount: oi.discount,
-                });
-            }
+        for (const oi of (orderItemsData ?? [])) {
+            try {
+                const item = await DAL.items.getById(oi.item_id);
+                if (item) {
+                    cartItemsFromOrder.push({
+                        item,
+                        qty: oi.qty,
+                        unit_price: oi.unit_price,
+                        discount: oi.discount,
+                    });
+                }
+            } catch { /* item may have been deleted */ }
         }
 
         setPrintOrder(order);
@@ -215,7 +223,7 @@ export default function Billing() {
     };
 
     const handleUpdateStatus = async (orderId: number, status: 'quote' | 'pending' | 'dispatched' | 'delivered' | 'cancelled') => {
-        await db.orders.update(orderId, { status });
+        await DAL.orders.update(orderId, { status });
         addToast(`Order #${orderId} → ${status}`, 'success');
     };
 
@@ -223,31 +231,62 @@ export default function Billing() {
         if (!confirm('Convert this Quote to a Confirmed Bill? This will deduct inventory.')) return;
 
         // Fetch order items to deduct stock
-        const orderItems = await db.order_items.where('order_id').equals(order.id!).toArray();
-        for (const oi of orderItems) {
-            const current = await db.items.get(oi.item_id);
-            if (current) {
-                const newParcels = Math.max(0, current.stock_parcels - oi.qty);
-                await db.items.update(oi.item_id, {
-                    stock_parcels: newParcels,
-                    stock_units: current.p_unit * current.P_unit_per_parcel * newParcels,
-                });
-            }
+        const orderItemsList = await DAL.order_items.getByOrder(order.id!);
+        for (const oi of (orderItemsList ?? [])) {
+            try {
+                const current = await DAL.items.getById(oi.item_id);
+                if (current) {
+                    const newParcels = Math.max(0, (current.stock_parcels ?? 0) - oi.qty);
+                    await DAL.items.update(oi.item_id, {
+                        stock_parcels: newParcels,
+                        stock_units: (current.p_unit ?? 1) * (current.p_unit_per_parcel ?? 1) * newParcels,
+                    });
+                }
+            } catch { /* skip */ }
         }
 
         // Create bill
         const billNumber = `INV-${new Date().getFullYear()}-${String(order.id).padStart(4, '0')}`;
-        await db.bills.add({
+        await DAL.bills.add({
             order_id: order.id!,
             bill_number: billNumber,
             business_name: activeBusiness || 'My Business',
             print_format: printFormat,
-            createdAt: new Date().toISOString(),
         });
 
         // Update order status
-        await db.orders.update(order.id!, { status: 'pending' });
+        await DAL.orders.update(order.id!, { status: 'pending' });
         addToast(`Quote converted to Bill ${billNumber}`, 'success');
+    };
+
+    // Unpaid orders computation
+    const unpaidOrders = orders.filter((o: any) => o.payment_status !== 'paid' && o.status !== 'cancelled');
+    const unpaidByProspect = unpaidOrders.reduce((acc: Record<string, any[]>, o: any) => {
+        const key = o.prospect_name || 'Walk-in';
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(o);
+        return acc;
+    }, {} as Record<string, any[]>);
+
+    // Share an order as text
+    const handleShareOrder = async (order: typeof orders[0]) => {
+        const orderItemsData = await DAL.order_items.getByOrder(order.id!) ?? [];
+        let text = `📋 Order #${order.id}\n`;
+        text += `Customer: ${order.prospect_name}\n`;
+        text += `Date: ${new Date(order.order_date).toLocaleDateString('en-IN')}\n`;
+        text += `Status: ${order.status}\n\n`;
+        text += `--- Items ---\n`;
+        orderItemsData.forEach((oi, i) => {
+            text += `${i + 1}. ${oi.item_name} × ${oi.qty} = ₹${oi.total.toFixed(2)}\n`;
+        });
+        text += `\n---\nSubtotal: ₹${order.subtotal.toFixed(2)}\n`;
+        if (order.tax_amount > 0) text += `Tax: ₹${order.tax_amount.toFixed(2)}\n`;
+        if (order.discount_amount > 0) text += `Discount: -₹${order.discount_amount.toFixed(2)}\n`;
+        text += `Total: ₹${order.grand_total.toFixed(2)}\n`;
+        if (order.due_amount > 0) text += `Due: ₹${order.due_amount.toFixed(2)}\n`;
+        text += `\nFrom: ${activeBusiness}`;
+        await shareText(text);
+        addToast('Order shared', 'success');
     };
 
     return (
@@ -265,6 +304,12 @@ export default function Billing() {
                     className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'saved' ? 'border-surface-900 text-surface-900' : 'border-transparent text-surface-400 hover:text-surface-600'}`}
                 >
                     <FileText className="h-4 w-4 inline mr-1.5" /> Saved Bills ({orders.length})
+                </button>
+                <button
+                    onClick={() => setActiveTab('unpaid')}
+                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'unpaid' ? 'border-red-600 text-red-600' : 'border-transparent text-surface-400 hover:text-surface-600'}`}
+                >
+                    <AlertCircle className="h-4 w-4 inline mr-1.5" /> Unpaid ({unpaidOrders.length})
                 </button>
             </div>
 
@@ -574,7 +619,7 @@ export default function Billing() {
                         </div>
                     </div>
                 </div>
-            ) : (
+            ) : activeTab === 'saved' ? (
                 /* ─── Saved Bills Tab ─── */
                 <div className="space-y-3">
                     <div className="relative max-w-md">
@@ -612,7 +657,7 @@ export default function Billing() {
                                                     paid: 'badge-success',
                                                     partial: 'badge-warning',
                                                     unpaid: 'badge-danger',
-                                                }[order.payment_status]}>{order.payment_status}</span>
+                                                }[order.payment_status as string] || 'badge-info'}>{order.payment_status}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -625,19 +670,25 @@ export default function Billing() {
                                     )}
 
                                     {/* Action buttons */}
-                                    <div className="flex items-center gap-2 pt-1">
+                                    <div className="flex items-center gap-2 pt-1 flex-wrap">
                                         <button
                                             onClick={() => handleOpenSavedBill(order)}
                                             className="btn-secondary text-xs flex items-center gap-1.5"
                                         >
-                                            <Printer className="h-3.5 w-3.5" /> Print/Share
+                                            <Printer className="h-3.5 w-3.5" /> Print
+                                        </button>
+                                        <button
+                                            onClick={() => handleShareOrder(order)}
+                                            className="btn-secondary text-xs flex items-center gap-1.5"
+                                        >
+                                            <Share2 className="h-3.5 w-3.5" /> Share
                                         </button>
                                         {order.status === 'quote' && (
                                             <button
                                                 onClick={() => handleConfirmQuote(order)}
                                                 className="btn-primary text-xs flex items-center gap-1.5"
                                             >
-                                                <CheckCircle className="h-3.5 w-3.5" /> Confirm Bill
+                                                <CheckCircle className="h-3.5 w-3.5" /> Convert to Invoice
                                             </button>
                                         )}
                                         {order.status === 'pending' && (
@@ -670,12 +721,52 @@ export default function Billing() {
                         </div>
                     )}
                 </div>
+            ) : (
+                /* ─── Unpaid Bills Tab ─── */
+                <div className="space-y-4">
+                    {Object.keys(unpaidByProspect).length === 0 ? (
+                        <div className="glass rounded-xl p-12 text-center text-surface-400">
+                            <CheckCircle className="h-8 w-8 mx-auto mb-2 text-emerald-400" />
+                            <p>All bills are paid! 🎉</p>
+                        </div>
+                    ) : (
+                        Object.entries(unpaidByProspect).map(([name, pOrders]: [string, any[]]) => {
+                            const totalDue = (pOrders as any[]).reduce((s: number, o: any) => s + Number(o.due_amount ?? 0), 0);
+                            return (
+                                <div key={name} className="glass rounded-xl overflow-hidden">
+                                    <div className="flex items-center justify-between px-4 py-3 bg-red-50 border-b border-red-100">
+                                        <div className="flex items-center gap-2">
+                                            <User className="h-4 w-4 text-red-500" />
+                                            <span className="font-semibold text-sm text-surface-900">{name}</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-red-600">Due: ₹{totalDue.toFixed(2)}</span>
+                                    </div>
+                                    <div className="divide-y divide-surface-100">
+                                        {(pOrders as any[]).map((o: any) => (
+                                            <div key={o.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-surface-50 cursor-pointer"
+                                                onClick={() => { setActiveTab('saved'); setBillSearch(String(o.id)); }}>
+                                                <div>
+                                                    <p className="text-sm text-surface-700">Order #{o.id}</p>
+                                                    <p className="text-xs text-surface-400">{new Date(o.order_date).toLocaleDateString('en-IN')}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-sm font-semibold text-surface-900">₹{o.grand_total.toFixed(2)}</p>
+                                                    <p className="text-xs text-red-500">Due: ₹{o.due_amount.toFixed(2)}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
             )}
 
             {/* PrintHandler overlay */}
             {showPrintHandler && printOrder && (
                 <PrintHandler
-                    order={printOrder}
+                    order={printOrder as any}
                     items={printCartItems}
                     onClose={() => { setShowPrintHandler(false); setPrintOrder(null); setPrintCartItems([]); }}
                 />
