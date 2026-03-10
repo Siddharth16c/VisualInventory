@@ -1,103 +1,113 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { useState, useMemo } from 'react';
+import { NavLink } from 'react-router-dom';
 import { useAppStore } from '@/store/store';
-import {
-    LayoutDashboard,
-    Package,
-    Receipt,
-    FileText,
-    Image,
-    Users,
-    Map,
-    TrendingUp,
-    Settings,
-    X,
-    Boxes,
-    Warehouse as WHIcon,
-    Truck,
-    Database,
-    BarChart,
-    BookOpen,
-    PieChart,
-    Columns
-} from 'lucide-react';
+import { useIsMasterAdmin } from '@/hooks/useFeatureFlag';
+import { FEATURE_DEFINITIONS, isFeatureEnabled } from '@/config/featuresConfig';
+import { X, Boxes } from 'lucide-react';
 
-const navItems = [
-    { to: '/billing', icon: Receipt, label: 'Billing' },
-    { to: '/inventory', icon: Package, label: 'Inventory' },
-    { to: '/pricelist', icon: FileText, label: 'Price List' },
-    { to: '/media', icon: Image, label: 'Media' },
-    { to: '/prospects', icon: Users, label: 'Prospects' },
-    { to: '/routes', icon: Map, label: 'Routes' },
-    { to: '/accounting', icon: TrendingUp, label: 'Accounting' },
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/catalogue', icon: Boxes, label: 'Catalogue' },
-    { to: '/warehouse', icon: WHIcon, label: 'Warehouse' },
-    { to: '/suppliers', icon: Truck, label: 'Suppliers' },
-    { to: '/dbeditor', icon: Database, label: 'DB Editor' },
-    { to: '/reports', icon: BarChart, label: 'Reports' },
-    { to: '/analytics', icon: PieChart, label: 'Analytics' },
-    { to: '/docs', icon: BookOpen, label: 'Docs' },
-    { to: '/splitviewer', icon: Columns, label: 'Split Viewer' },
-    { to: '/maintenance', icon: Settings, label: 'Maintenance' },
-];
+function NavItem({ 
+    to, 
+    icon: Icon, 
+    label, 
+    isExpanded 
+}: { 
+    to: string; 
+    icon: React.ComponentType<{ className?: string }>; 
+    label: string; 
+    isExpanded: boolean;
+}) {
+    return (
+        <NavLink
+            to={to}
+            onClick={() => useAppStore.getState().setSidebarOpen(false)}
+            title={!isExpanded ? label : undefined}
+            className={({ isActive }) =>
+                `flex items-center gap-2.5 rounded-lg text-sm font-medium transition-all duration-200
+                ${isExpanded ? 'px-3 py-2' : 'px-2 py-2 justify-center'}
+                ${isActive
+                    ? 'bg-surface-900 text-white shadow-sm'
+                    : 'text-surface-600 hover:text-surface-900 hover:bg-surface-100'
+                }`
+            }
+        >
+            <Icon className="h-[17px] w-[17px] flex-shrink-0" />
+            {isExpanded && <span className="truncate animate-fade-in">{label}</span>}
+        </NavLink>
+    );
+}
 
 export default function Sidebar() {
     const sidebarOpen = useAppStore((s) => s.sidebarOpen);
+    const [hovered, setHovered] = useState(false);
+    const isMasterAdmin = useIsMasterAdmin();
+    const enabledFeatures = useAppStore((s) => s.enabledFeatures);
+    const userRole = useAppStore((s) => s.userRole);
+
+    const isExpanded = sidebarOpen || hovered;
+
+    const visibleFeatures = useMemo(() => {
+        return FEATURE_DEFINITIONS.filter(feature => {
+            if (feature.adminOnly && !isMasterAdmin) return false;
+            
+            if (!isMasterAdmin && !feature.alwaysEnabled) {
+                return isFeatureEnabled(feature.key, enabledFeatures, userRole);
+            }
+            
+            return true;
+        });
+    }, [isMasterAdmin, enabledFeatures, userRole]);
 
     return (
         <aside
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
             className={`
-        fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-300 ease-out
-        lg:relative lg:translate-x-0 lg:z-auto
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        glass flex flex-col
-      `}
+                fixed inset-y-0 left-0 z-40 transform transition-all duration-300 ease-out
+                lg:relative lg:translate-x-0 lg:z-auto
+                ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+                ${isExpanded ? 'w-56' : 'w-[52px]'}
+                glass flex flex-col overflow-hidden
+            `}
         >
             {/* Logo */}
-            <div className="flex items-center gap-3 px-5 py-5 border-b border-surface-300">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-900 shadow-md">
-                    <Boxes className="h-5 w-5 text-white" />
+            <div className={`flex items-center gap-3 px-3 py-4 border-b border-surface-300 ${isExpanded ? '' : 'justify-center'}`}>
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-surface-900 shadow-md">
+                    <Boxes className="h-4 w-4 text-white" />
                 </div>
-                <div>
-                    <h1 className="text-lg font-bold text-surface-900">
-                        VisualOS
-                    </h1>
-                    <p className="text-[10px] text-surface-500 font-medium tracking-wider uppercase">Inventory Suite</p>
-                </div>
-                <button
-                    onClick={() => useAppStore.getState().setSidebarOpen(false)}
-                    className="ml-auto lg:hidden btn-ghost p-1.5"
-                >
-                    <X className="h-5 w-5" />
-                </button>
+                {isExpanded && (
+                    <div className="min-w-0 animate-fade-in">
+                        <h1 className="text-sm font-bold text-surface-900 truncate">VisualOS</h1>
+                        <p className="text-[9px] text-surface-500 font-medium tracking-wider uppercase">Inventory Suite</p>
+                    </div>
+                )}
+                {sidebarOpen && (
+                    <button
+                        onClick={() => useAppStore.getState().setSidebarOpen(false)}
+                        className="ml-auto lg:hidden btn-ghost p-1"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                )}
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-                {navItems.map((item) => (
-                    <NavLink
-                        key={item.to}
-                        to={item.to}
-                        onClick={() => useAppStore.getState().setSidebarOpen(false)}
-                        className={({ isActive }) =>
-                            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200
-              ${isActive
-                                ? 'bg-surface-900 text-white shadow-sm'
-                                : 'text-surface-600 hover:text-surface-900 hover:bg-surface-100'
-                            }`
-                        }
-                    >
-                        <item.icon className="h-[18px] w-[18px] flex-shrink-0" />
-                        <span>{item.label}</span>
-                    </NavLink>
+            <nav className="flex-1 overflow-y-auto py-3 px-1.5 space-y-0.5">
+                {visibleFeatures.map((feature) => (
+                    <NavItem
+                        key={feature.key}
+                        to={feature.route}
+                        icon={feature.icon}
+                        label={feature.label}
+                        isExpanded={isExpanded}
+                    />
                 ))}
             </nav>
 
             {/* Footer */}
-            <div className="border-t border-surface-300 p-4">
-                <div className="flex items-center gap-2 text-xs text-surface-500">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse-soft" />
-                    <span>Offline-Ready</span>
+            <div className="border-t border-surface-300 p-3">
+                <div className={`flex items-center gap-2 text-xs text-surface-500 ${isExpanded ? '' : 'justify-center'}`}>
+                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse-soft flex-shrink-0" />
+                    {isExpanded && <span className="animate-fade-in">Offline-Ready</span>}
                 </div>
             </div>
         </aside>

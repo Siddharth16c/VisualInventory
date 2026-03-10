@@ -6,6 +6,7 @@ import Dexie, { type Table } from 'dexie';
 export interface Item {
     id?: number;
     item_name: string;          // e.g. "Apsara Long Notebook 172pg"
+    keyword_id?: string;        // deterministic SKU identifier — barcode replacement
     category: string;           // e.g. "Stationery", "Fireworks"
     product_id?: number;        // FK → products (generic name like "Notebooks")
     brand_id?: number;          // FK → brands

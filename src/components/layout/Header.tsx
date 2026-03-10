@@ -4,19 +4,21 @@ import { Menu, Wifi, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 const pageTitles: Record<string, string> = {
-    '/dashboard': 'Dashboard',
+    '/billing': 'Orders & Billing',
     '/inventory': 'Inventory',
-    '/billing': 'Billing',
-    '/pricelist': 'Price List',
-    '/media': 'Media Studio',
-    '/prospects': 'Prospects',
-    '/routes': 'Routes & Visits',
+    '/fieldops': 'Field Ops',
+    '/marketing': 'Marketing',
+    '/suppliers': 'Suppliers',
+    '/warehouse': 'Warehouse',
+    '/reports': 'Reports & Analytics',
     '/accounting': 'Accounting',
-    '/maintenance': 'Maintenance',
+    '/splitviewer': 'Split Viewer',
+    '/settings': 'Settings',
 };
 
 export default function Header() {
     const location = useLocation();
+    const activeBusiness = useAppStore((s) => s.activeBusiness);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
 
     useEffect(() => {
@@ -41,9 +43,14 @@ export default function Header() {
                 <Menu className="h-5 w-5" />
             </button>
 
-            <h2 className="text-lg font-semibold text-surface-900">{title}</h2>
+            {/* <h2 className="text-lg font-semibold text-surface-900">{title}</h2> */}
 
             <div className="ml-auto flex items-center gap-3">
+                {/* Firm name badge */}
+                <span className="hidden sm:inline text-xs font-medium text-surface-500 bg-surface-100 px-2.5 py-1 rounded-full truncate max-w-[180px]">
+                    {activeBusiness}
+                </span>
+
                 <div
                     className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${isOnline
                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'

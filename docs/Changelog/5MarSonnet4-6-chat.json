@@ -1,0 +1,158 @@
+{
+  "session": {
+    "date": "2026-03-05",
+    "model": "Claude Sonnet 4.6",
+    "interface": "claude.ai free chat",
+    "context_files_used": [
+      "project_context.json",
+      "PROJECT_RETROSPECTION_CONTEXT_ENHANCED.md",
+      "supabase_schema.sql",
+      "dal.ts",
+      "types.ts",
+      "Billing.tsx"
+    ]
+  },
+  "files_changed": [
+    {
+      "file": "supabase SQL editor",
+      "type": "db_migration",
+      "tasks": ["T1", "T2", "T3", "T4"],
+      "changes": [
+        "keyword_id + reorder_threshold + purchase_price_unit + tsvector_search added to items",
+        "stock_movements table created",
+        "storage_places, storage_zones, storage_slots, item_locations tables created",
+        "RLS enabled and policies added on all tenant tables",
+        "RPCs: get_low_stock_items, log_stock_movement"
+      ]
+    },
+    {
+      "file": "src/db/dal.ts",
+      "type": "rewrite",
+      "tasks": ["T5"],
+      "bug_fixes": [
+        "getAll() now manually filters firm_id — RLS-off safety",
+        "order_items.getByOrder() verifies firm ownership via JOIN",
+        "analytics + reports methods all scoped to getFirmId()",
+        "account.getAllFirms() guarded by isMasterAdmin()",
+        "suppliers.getBusinessVolume() filtered by firm_id",
+        "visits.getFuturePlans() filtered by firm_id",
+        "warehouse.updateCell() injects firm_id",
+        "bulkUpsert items uses keyword_id as conflict column"
+      ],
+      "new_methods": [
+        "items.getByKeywordId",
+        "items.search (server-side multi-filter)",
+        "items.getLowStockRpc",
+        "stock_movements.log",
+        "stock_movements.logAndUpdateStock",
+        "stock_movements.getByItem",
+        "stock_movements.getByType",
+        "stock_movements.getByDateRange",
+        "storage_places.getAll + getWithZones + add + update + delete",
+        "storage_zones.getAll + getByPlace + add + update + delete",
+        "storage_slots.getAll + getByZone + add + update + delete",
+        "item_locations.getAll + getByItem + getBySlot + moveItem + setVerified + add + update + delete",
+        "analytics.getStagnantStock",
+        "analytics.getMovementVelocity",
+        "isMasterAdmin helper"
+      ]
+    },
+    {
+      "file": "src/db/types.ts",
+      "type": "additive",
+      "tasks": ["T6-types"],
+      "modified_interfaces": ["Item"],
+      "new_interfaces": [
+        "MovementType",
+        "StoragePlaceType",
+        "StockMovement",
+        "StockMovementPayload",
+        "StoragePlace",
+        "StorageZone",
+        "StorageSlot",
+        "ItemLocation",
+        "ItemLocationFull",
+        "ItemSearchResult",
+        "ItemSearchFilters",
+        "LowStockItem",
+        "BrandMetric",
+        "AccountFlow",
+        "VerticalSummary",
+        "StagnantStockItem",
+        "MovementVelocityItem"
+      ]
+    },
+    {
+      "file": "src/pages/Billing.tsx",
+      "type": "refactor",
+      "tasks": ["T7-billing"],
+      "performance_fixes": [
+        "Removed full items table load from useSupabaseLiveQuery",
+        "Server-side debounced search via DAL.items.search() — 250ms debounce",
+        "Promise.all for parallel order_items inserts"
+      ],
+      "correctness_fixes": [
+        "Atomic stock deduction via logAndUpdateStock RPC — no race condition",
+        "Single deductStock() function — no duplicated logic between handleCreateOrder and handleConfirmQuote",
+        "isSaving flag prevents double-submit"
+      ],
+      "ux_additions": [
+        "Hotkeys: Alt+S (search focus), Enter (add first result), F10 (save & print)",
+        "Hotkey hint bar",
+        "Search loading spinner",
+        "First result Enter indicator",
+        "keyword_id shown in results and cart",
+        "Rupee symbol ₹ throughout",
+        "Clear all cart button",
+        "Prospect dropdown onBlur/onMouseDown fix"
+      ]
+    }
+  ],
+  "architectural_decisions": [
+    {
+      "decision": "Keep variant_params_1/2/3 as separate tables",
+      "reason": "Merging breaks existing UI dropdowns and DAL — migration cost exceeds benefit"
+    },
+    {
+      "decision": "Keep suppliers global (no firm_id)",
+      "reason": "Original architectural intent — suppliers shared across firms"
+    },
+    {
+      "decision": "Manual firm_id filter in getAll()",
+      "reason": "RLS disabled due to Cloudflare proxy ISP workaround — manual filter ensures isolation"
+    },
+    {
+      "decision": "3-layer location without PostGIS",
+      "reason": "Text labels sufficient for high-level detection — no spatial engine overhead"
+    },
+    {
+      "decision": "CCTV/voxel as commented placeholders",
+      "reason": "Requires physically zoned stores first — implement last"
+    },
+    {
+      "decision": "Stay on Supabase",
+      "reason": "Cloudflare proxy fixes ISP ban — migration cost to Convex too high mid-project"
+    }
+  ],
+  "pending_tasks": [
+    { "id": "T6", "task": "Subcategories table + products.category normalization", "depends_on": "dal.ts done", "priority": "medium", "status": "pending" },
+    { "id": "T7", "task": "MinIO config + Directus Docker setup", "depends_on": "schema stable", "priority": "medium", "status": "pending" },
+    { "id": "T8", "task": "Typesense sync setup + search UI", "depends_on": "items table settled", "priority": "high", "status": "pending" },
+    { "id": "T9", "task": "DBEditor.tsx Page 1 — named button query UI (image reference provided)", "depends_on": "none", "priority": "high", "status": "next" },
+    { "id": "T10", "task": "DBEditor Page 2 — fire saved query buttons per table", "depends_on": "T9", "priority": "high", "status": "pending" },
+    { "id": "T11", "task": "TanStack Query integration replacing useSupabaseLiveQuery", "depends_on": "DAL done", "priority": "high", "status": "pending" },
+    { "id": "T12", "task": "Analytics.tsx — KPI graphs + heatmaps", "depends_on": "schema done", "priority": "medium", "status": "pending" },
+    { "id": "T13", "task": "Location UI — SVG top-view floor plans + item placement panel", "depends_on": "location schema done", "priority": "medium", "status": "pending" },
+    { "id": "T14", "task": "Grafana dashboard setup (Supabase direct connection)", "depends_on": "none", "priority": "low", "status": "pending" },
+    { "id": "T15", "task": "Inkscape SVG — store architecture + DB schema diagrams", "depends_on": "none", "priority": "low", "status": "pending" },
+    { "id": "T16", "task": "n8n workflows — restock signals + movement events", "depends_on": "stock_movements done", "priority": "medium", "status": "pending" },
+    { "id": "T17", "task": "CCTV pixel-watch + voxel sync", "depends_on": "physical zones established", "priority": "low", "status": "future/last" }
+  ],
+  "invariants_preserved": [
+    "stock_units = p_unit × p_unit_per_parcel × stock_parcels — NEVER BROKEN",
+    "variant_params_1/2/3 kept as 3 separate tables",
+    "suppliers kept global (no firm_id)",
+    "emitDbChange event pattern preserved in all new DAL methods",
+    "FK relationships preserved across all new tables"
+  ]
+}

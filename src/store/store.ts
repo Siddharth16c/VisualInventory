@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Item, Prospect } from '@/db/dexie';
+import type { FeatureFlag } from '@/config/featuresConfig';
 
 // ─── Cart Slice ─────────────────────────────────────────────────
 
@@ -16,7 +17,20 @@ interface CartSlice {
     pricingMode: 'retail' | 'wholesale';    // Bulk (wholesale) / Lean (retail)
     taxRate: number;
     globalDiscount: number;
-
+    
+    // Search & Filter State
+    searchQuery: string;
+    searchFilters: {
+        vertical_id?: number;
+        brand_id?: number;
+        subcategory_id?: number;
+    };
+    expandedVerticals: Set<number | string>; // 'general' for uncategorized
+    
+    // Bill Management State
+    billDateRange: 'day' | 'week' | 'month' | 'all';
+    selectedBillIds: Set<number>;
+    
     addToCart: (item: Item) => void;
     removeFromCart: (itemId: number) => void;
     updateCartItemQty: (itemId: number, qty: number) => void;
@@ -27,6 +41,20 @@ interface CartSlice {
     setTaxRate: (rate: number) => void;
     setGlobalDiscount: (discount: number) => void;
     clearCart: () => void;
+    
+    // Search Actions
+    setSearchQuery: (query: string) => void;
+    setSearchFilter: (key: 'vertical_id' | 'brand_id' | 'subcategory_id', value: number | undefined) => void;
+    clearSearchFilters: () => void;
+    toggleVerticalExpanded: (verticalId: number | string) => void;
+    expandAllVerticals: () => void;
+    collapseAllVerticals: () => void;
+    
+    // Bill Management Actions
+    setBillDateRange: (range: 'day' | 'week' | 'month' | 'all') => void;
+    toggleBillSelection: (billId: number) => void;
+    selectAllBills: (billIds: number[]) => void;
+    clearBillSelection: () => void;
 
     getSubtotal: () => number;
     getTaxAmount: () => number;
@@ -39,8 +67,10 @@ interface UISlice {
     sidebarOpen: boolean;
     activeModal: string | null;
     toasts: Array<{ id: string; message: string; type: 'success' | 'error' | 'info' }>;
-    activeBusiness: string;     // Current business name
+    activeBusiness: string;
     userRole: string;
+    firmId: string | null;
+    enabledFeatures: Record<FeatureFlag, boolean> | null;
 
     toggleSidebar: () => void;
     setSidebarOpen: (open: boolean) => void;
@@ -50,6 +80,8 @@ interface UISlice {
     removeToast: (id: string) => void;
     setActiveBusiness: (name: string) => void;
     setUserRole: (role: string) => void;
+    setFirmId: (firmId: string | null) => void;
+    setEnabledFeatures: (features: Record<FeatureFlag, boolean> | null) => void;
 }
 
 // ─── Media Slice ────────────────────────────────────────────────
@@ -76,6 +108,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
     pricingMode: 'retail',
     taxRate: 0,
     globalDiscount: 0,
+    
+    // Search & Filter State
+    searchQuery: '',
+    searchFilters: {},
+    expandedVerticals: new Set(['general']),
+    
+    // Bill Management State
+    billDateRange: 'all',
+    selectedBillIds: new Set(),
 
     addToCart: (item) =>
         set((state) => {
@@ -140,6 +181,52 @@ export const useAppStore = create<AppStore>((set, get) => ({
     setTaxRate: (rate) => set({ taxRate: Math.max(0, rate) }),
     setGlobalDiscount: (discount) => set({ globalDiscount: Math.max(0, discount) }),
     clearCart: () => set({ cartItems: [], selectedProspect: null, taxRate: 0, globalDiscount: 0 }),
+    
+    // ── Search Actions ───────────────────────────────────────────
+    setSearchQuery: (query) => set({ searchQuery: query }),
+    
+    setSearchFilter: (key, value) =>
+        set((state) => ({
+            searchFilters: { ...state.searchFilters, [key]: value },
+        })),
+    
+    clearSearchFilters: () => set({ searchFilters: {}, searchQuery: '' }),
+    
+    toggleVerticalExpanded: (verticalId) =>
+        set((state) => {
+            const newSet = new Set(state.expandedVerticals);
+            if (newSet.has(verticalId)) {
+                newSet.delete(verticalId);
+            } else {
+                newSet.add(verticalId);
+            }
+            return { expandedVerticals: newSet };
+        }),
+    
+    expandAllVerticals: () => set((state) => {
+        // TODO: Backend - Fetch all vertical IDs and add to set
+        return { expandedVerticals: new Set(['general', 1, 2, 3, 4, 5]) };
+    }),
+    
+    collapseAllVerticals: () => set({ expandedVerticals: new Set() }),
+    
+    // ── Bill Management Actions ──────────────────────────────────
+    setBillDateRange: (range) => set({ billDateRange: range }),
+    
+    toggleBillSelection: (billId) =>
+        set((state) => {
+            const newSet = new Set(state.selectedBillIds);
+            if (newSet.has(billId)) {
+                newSet.delete(billId);
+            } else {
+                newSet.add(billId);
+            }
+            return { selectedBillIds: newSet };
+        }),
+    
+    selectAllBills: (billIds) => set({ selectedBillIds: new Set(billIds) }),
+    
+    clearBillSelection: () => set({ selectedBillIds: new Set() }),
 
     getSubtotal: () => {
         const { cartItems } = get();
@@ -168,6 +255,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     toasts: [],
     activeBusiness: 'R.S. Enterprises',
     userRole: 'master_admin',
+    firmId: null,
+    enabledFeatures: null,
 
     toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
     setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -184,6 +273,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
     setActiveBusiness: (name) => set({ activeBusiness: name }),
     setUserRole: (role) => set({ userRole: role }),
+    setFirmId: (firmId) => set({ firmId }),
+    setEnabledFeatures: (features) => set({ enabledFeatures: features }),
 
     // ── Media State ─────────────────────────────────────────────
     ffmpegProgress: 0,

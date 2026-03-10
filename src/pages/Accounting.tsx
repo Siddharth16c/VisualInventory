@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Cost } from '@/db/dexie';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
+import { DAL } from '@/db/dal';
 import { useAppStore } from '@/store/store';
 import { Plus, Trash2, X, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 
 export default function Accounting() {
-    const orders = useLiveQuery(() => db.orders.toArray()) || [];
-    const costs = useLiveQuery(() => db.costs.toArray()) || [];
+    const orders = useSupabaseQuery(['orders'], () => DAL.orders.getAll(), []);
+    const costs = useSupabaseQuery(['costs'], () => DAL.costs.getAll(), []);
     const addToast = useAppStore((s) => s.addToast);
     const [showModal, setShowModal] = useState(false);
-    const [form, setForm] = useState<Partial<Cost>>({
+    const [form, setForm] = useState<any>({
         cost_type: '',
         business_type: '',
         amount: 0,
@@ -19,10 +19,10 @@ export default function Accounting() {
 
     const [filterMonth, setFilterMonth] = useState(new Date().toISOString().substring(0, 7));
 
-    const monthOrders = orders.filter((o) => o.order_date.startsWith(filterMonth));
-    const monthCosts = costs.filter((c) => c.date.startsWith(filterMonth));
-    const revenue = monthOrders.reduce((s, o) => s + o.grand_total, 0);
-    const totalCost = monthCosts.reduce((s, c) => s + c.amount, 0);
+    const monthOrders = orders.filter((o: any) => (o.order_date || o.created_at || '').startsWith(filterMonth));
+    const monthCosts = costs.filter((c: any) => (c.date || '').startsWith(filterMonth));
+    const revenue = monthOrders.reduce((s: number, o: any) => s + Number(o.grand_total ?? 0), 0);
+    const totalCost = monthCosts.reduce((s: number, c: any) => s + Number(c.amount ?? 0), 0);
     const profit = revenue - totalCost;
 
     const handleSaveCost = async () => {
@@ -30,14 +30,14 @@ export default function Accounting() {
             addToast('Type and amount required', 'error');
             return;
         }
-        await db.costs.add(form as Cost);
+        await DAL.costs.add(form);
         addToast('Cost recorded', 'success');
         setShowModal(false);
         setForm({ cost_type: '', business_type: '', amount: 0, description: '', date: new Date().toISOString().split('T')[0] });
     };
 
     const handleDeleteCost = async (id: number) => {
-        await db.costs.delete(id);
+        await DAL.costs.delete(id);
         addToast('Cost deleted', 'info');
     };
 
@@ -106,13 +106,13 @@ export default function Accounting() {
                             {monthCosts.length === 0 ? (
                                 <tr><td colSpan={6} className="px-4 py-8 text-center text-surface-500">No costs for this month</td></tr>
                             ) : (
-                                monthCosts.map((c) => (
+                                monthCosts.map((c: any) => (
                                     <tr key={c.id} className="border-b border-surface-100 hover:bg-surface-50">
                                         <td className="px-4 py-2 text-surface-500">{c.date}</td>
                                         <td className="px-4 py-2 text-surface-500"><span className="badge-info">{c.cost_type}</span></td>
                                         <td className="px-4 py-2 text-surface-500">{c.business_type}</td>
                                         <td className="px-4 py-2 text-surface-500">{c.description}</td>
-                                        <td className="px-4 py-2 text-right font-semibold text-red-500">Rs.{c.amount.toFixed(2)}</td>
+                                        <td className="px-4 py-2 text-right font-semibold text-red-500">Rs.{Number(c.amount).toFixed(2)}</td>
                                         <td className="px-4 py-2 text-surface-500">
                                             <button onClick={() => handleDeleteCost(c.id!)} className="btn-ghost p-1"><Trash2 className="h-4 w-4 text-red-400" /></button>
                                         </td>
@@ -145,16 +145,16 @@ export default function Accounting() {
                             {monthOrders.length === 0 ? (
                                 <tr><td colSpan={6} className="px-4 py-8 text-center text-surface-500">No orders this month</td></tr>
                             ) : (
-                                monthOrders.map((o) => (
+                                monthOrders.map((o: any) => (
                                     <tr key={o.id} className="border-b border-surface-100 hover:bg-surface-50">
                                         <td className="px-4 py-2 font-medium text-surface-500">#{o.id}</td>
                                         <td className="px-4 py-2 text-surface-500">{o.prospect_name}</td>
-                                        <td className="px-4 py-2 text-surface-500">{new Date(o.order_date).toLocaleDateString('en-IN')}</td>
+                                        <td className="px-4 py-2 text-surface-500">{new Date(o.order_date || o.created_at).toLocaleDateString('en-IN')}</td>
                                         <td className="px-4 py-2">
                                             <span className={o.status === 'pending' ? 'badge-warning' : o.status === 'delivered' ? 'badge-success' : 'badge-info'}>{o.status}</span>
                                         </td>
-                                        <td className="px-4 py-2 text-right font-semibold text-emerald-400">Rs.{o.grand_total.toFixed(2)}</td>
-                                        <td className="px-4 py-2 text-right text-amber-400">Rs.{o.due_amount.toFixed(2)}</td>
+                                        <td className="px-4 py-2 text-right font-semibold text-emerald-400">Rs.{Number(o.grand_total).toFixed(2)}</td>
+                                        <td className="px-4 py-2 text-right text-amber-400">Rs.{Number(o.due_amount).toFixed(2)}</td>
                                     </tr>
                                 ))
                             )}
@@ -191,7 +191,7 @@ export default function Accounting() {
                             </div>
                             <div>
                                 <label className="text-xs text-surface-400 mb-1 block">Amount</label>
-                                <input type="number" className="input-field" value={form.amount || ''} onChange={(e) => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} />
+                                <input type="text" inputMode="decimal" className="input-field" value={form.amount || ''} onChange={(e) => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} />
                             </div>
                             <div>
                                 <label className="text-xs text-surface-400 mb-1 block">Description</label>

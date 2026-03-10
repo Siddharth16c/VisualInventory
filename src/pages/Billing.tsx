@@ -1,129 +1,131 @@
-import { useState, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Item, type Order, type OrderItem, type Bill } from '@/db/dexie';
-import { useAppStore, type CartItem } from '@/store/store';
+/**
+ * Billing Page - Refactored with 60/40 layout
+ * New Bill | Saved Bills | Unpaid Bills tabs
+ * Uses AdvancedSearch, VerticalCatalog, BillDetailsPanel components
+ */
+
+import { useState, useCallback, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { DAL } from '@/db/dal';
+import { useAppStore } from '@/store/store';
+import type { Item, Prospect } from '@/db/dexie';
+import type { Vertical, Brand, Subcategory, Order } from '@/db/types';
+
+// Components
+import AdvancedSearch from '@/components/billing/AdvancedSearch';
+import VerticalCatalog from '@/components/billing/VerticalCatalog';
+import ItemCard from '@/components/billing/ItemCard';
+import BillDetailsPanel from '@/components/billing/BillDetailsPanel';
+import SavedBillsView from '@/components/billing/SavedBillsView';
+import UnpaidBillsView from '@/components/billing/UnpaidBillsView';
 import PrintHandler from '@/components/billing/PrintHandler';
+
+// Icons
 import {
-    Search, Plus, Minus, Trash2, Printer, ShoppingCart, User, X,
-    CreditCard, Tag, FileText, Clock, CheckCircle, Truck, RotateCcw,
+    ShoppingCart, FileText, AlertCircle, Plus, Minus,
+    Search, Filter, ChevronDown, ChevronRight
 } from 'lucide-react';
 
-type Tab = 'new' | 'saved';
+
+type Tab = 'new' | 'saved' | 'unpaid';
 
 export default function Billing() {
-    const items = useLiveQuery(() => db.items.toArray()) || [];
-    const prospects = useLiveQuery(() => db.prospects.toArray()) || [];
-    const orders = useLiveQuery(() => db.orders.orderBy('createdAt').reverse().toArray()) || [];
-    const variants = useLiveQuery(() => db.variant_params_1.toArray()) || [];
-    const addToast = useAppStore((s) => s.addToast);
-    const activeBusiness = useAppStore((s) => s.activeBusiness);
+    const [activeTab, setActiveTab] = useState<Tab>('new');
+    const [printFormat, setPrintFormat] = useState<'a4' | 'thermal' | 'receipt'>('a4');
+    const [showPrintHandler, setShowPrintHandler] = useState(false);
+    const [printOrder, setPrintOrder] = useState<Order | null>(null);
+    const [searchResults, setSearchResults] = useState<Item[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
 
-    // Cart state
+    // Store
     const cartItems = useAppStore((s) => s.cartItems);
+    const searchQuery = useAppStore((s) => s.searchQuery);
+    const searchFilters = useAppStore((s) => s.searchFilters);
     const selectedProspect = useAppStore((s) => s.selectedProspect);
     const pricingMode = useAppStore((s) => s.pricingMode);
-    const taxRate = useAppStore((s) => s.taxRate);
-    const globalDiscount = useAppStore((s) => s.globalDiscount);
     const addToCart = useAppStore((s) => s.addToCart);
-    const removeFromCart = useAppStore((s) => s.removeFromCart);
-    const updateCartItemQty = useAppStore((s) => s.updateCartItemQty);
-    const updateCartItemPrice = useAppStore((s) => s.updateCartItemPrice);
-    const updateCartItemDiscount = useAppStore((s) => s.updateCartItemDiscount);
-    const setSelectedProspect = useAppStore((s) => s.setSelectedProspect);
-    const setPricingMode = useAppStore((s) => s.setPricingMode);
-    const setTaxRate = useAppStore((s) => s.setTaxRate);
-    const setGlobalDiscount = useAppStore((s) => s.setGlobalDiscount);
     const clearCart = useAppStore((s) => s.clearCart);
+    const addToast = useAppStore((s) => s.addToast);
     const getSubtotal = useAppStore((s) => s.getSubtotal);
     const getTaxAmount = useAppStore((s) => s.getTaxAmount);
     const getGrandTotal = useAppStore((s) => s.getGrandTotal);
+    const paidAmount = useAppStore((s) => s.taxRate); // Reuse taxRate store for paid amount tracking
+    const setPaidAmount = useAppStore((s) => s.setTaxRate);
 
-    const [activeTab, setActiveTab] = useState<Tab>('new');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [showProspectSearch, setShowProspectSearch] = useState(false);
-    const [prospectQuery, setProspectQuery] = useState('');
-    const [printFormat, setPrintFormat] = useState<'a4' | 'thermal' | 'rawbt'>('a4');
-    const [paidAmount, setPaidAmount] = useState<number | ''>('');
+    // Data fetching with TanStack Query
+    const { data: items = [] } = useQuery({
+        queryKey: ['items'],
+        queryFn: () => DAL.items.getAll(),
+    });
 
-    // PrintHandler state
-    const [showPrintHandler, setShowPrintHandler] = useState(false);
-    const [printOrder, setPrintOrder] = useState<Order | null>(null);
-    const [printCartItems, setPrintCartItems] = useState<CartItem[]>([]);
+    const { data: prospects = [] } = useQuery({
+        queryKey: ['prospects'],
+        queryFn: () => DAL.prospects.getAll(),
+    });
 
-    // Saved bills search
-    const [billSearch, setBillSearch] = useState('');
+    const { data: orders = [], refetch: refetchOrders } = useQuery({
+        queryKey: ['orders'],
+        queryFn: () => DAL.orders.getAll(),
+    });
 
-    // Filtered items for search
-    const filteredItems = useMemo(
-        () =>
-            searchQuery.trim()
-                ? items.filter(
-                    (i) =>
-                        i.item_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        i.category.toLowerCase().includes(searchQuery.toLowerCase())
-                )
-                : [],
-        [items, searchQuery]
-    );
+    const { data: verticals = [] } = useQuery({
+        queryKey: ['verticals'],
+        queryFn: () => DAL.verticals.getAll(),
+    });
 
-    // Filtered prospects
-    const filteredProspects = useMemo(
-        () =>
-            prospects.filter(
-                (p) =>
-                    p.prospectname.toLowerCase().includes(prospectQuery.toLowerCase()) ||
-                    p.area_town.toLowerCase().includes(prospectQuery.toLowerCase())
-            ),
-        [prospects, prospectQuery]
-    );
+    const { data: brands = [] } = useQuery({
+        queryKey: ['brands'],
+        queryFn: () => DAL.brands.getAll(),
+    });
 
-    // Filtered saved orders
-    const filteredOrders = useMemo(() => {
-        if (!billSearch.trim()) return orders;
-        const q = billSearch.toLowerCase();
-        return orders.filter(
-            (o) =>
-                o.prospect_name.toLowerCase().includes(q) ||
-                String(o.id).includes(q)
-        );
-    }, [orders, billSearch]);
+    const { data: subcategories = [] } = useQuery({
+        queryKey: ['subcategories'],
+        queryFn: () => DAL.subcategories.getAll(),
+    });
 
-    // Variant map
-    const variantMap = useMemo(() => {
-        const m = new Map<number, string>();
-        variants.forEach((v) => m.set(v.id!, v.name));
-        return m;
-    }, [variants]);
-
-    const subtotal = getSubtotal();
-    const taxAmt = getTaxAmount();
-    const grandTotal = getGrandTotal();
-    const paid = Number(paidAmount) || 0;
-    const dueAmount = Math.max(0, grandTotal - paid);
-    const paymentStatus: 'unpaid' | 'partial' | 'paid' =
-        paid >= grandTotal ? 'paid' : paid > 0 ? 'partial' : 'unpaid';
-
-    const paymentBadge = {
-        paid: { text: 'Paid', cls: 'badge-success' },
-        partial: { text: 'Partial', cls: 'badge-warning' },
-        unpaid: { text: 'Unpaid', cls: 'badge-danger' },
-    }[paymentStatus];
-
-    const statusBadge = (status: string) => {
-        switch (status) {
-            case 'delivered': return 'badge-success';
-            case 'dispatched': return 'badge-info';
-            default: return 'badge-warning';
+    // Search handler with Typesense fallback
+    const handleSearch = useCallback(async (query: string) => {
+        if (!query.trim() && !searchFilters.vertical_id && !searchFilters.brand_id && !searchFilters.subcategory_id) {
+            setSearchResults([]);
+            return;
         }
-    };
 
+        setIsSearching(true);
+        try {
+            const results = await DAL.items.search({
+                query: query || undefined,
+                brand_id: searchFilters.brand_id,
+                vertical_id: searchFilters.vertical_id,
+                subcategory_id: searchFilters.subcategory_id,
+                limit: 50,
+            });
+            setSearchResults(results as Item[]);
+        } catch (error) {
+            console.error('Search error:', error);
+            addToast('Search failed', 'error');
+        } finally {
+            setIsSearching(false);
+        }
+    }, [searchFilters, addToast]);
+
+    // Create order
     const handleCreateOrder = async (isQuote: boolean = false) => {
         if (cartItems.length === 0) {
             addToast('Cart is empty', 'error');
             return;
         }
 
-        const order: Omit<Order, 'id'> = {
+        const subtotal = getSubtotal();
+        const taxAmt = getTaxAmount();
+        const grandTotal = getGrandTotal();
+        const paid = Number(paidAmount) || 0;
+        const due = Math.max(0, grandTotal - paid);
+        const paymentStatus: 'unpaid' | 'partial' | 'paid' =
+            paid >= grandTotal ? 'paid' : paid > 0 ? 'partial' : 'unpaid';
+
+        // DAL.orders.add injects firm_id + created_at server-side; cast to any to avoid
+        // requiring those fields here (they aren't available client-side at insert time)
+        const order = {
             prospect_id: selectedProspect?.id ?? 0,
             prospect_name: selectedProspect?.prospectname || 'Walk-in Customer',
             order_date: new Date().toISOString(),
@@ -131,553 +133,307 @@ export default function Billing() {
             status: isQuote ? 'quote' : 'pending',
             subtotal,
             tax_amount: taxAmt,
-            discount_amount: globalDiscount,
+            discount_amount: 0,
             grand_total: grandTotal,
             paid_amount: paid,
-            due_amount: dueAmount,
+            due_amount: due,
             payment_status: paymentStatus,
             notes: '',
-            createdAt: new Date().toISOString(),
-        };
+        } as Parameters<typeof DAL.orders.add>[0];
 
-        const orderId = await db.orders.add(order);
+        try {
+            const savedOrder: any = await DAL.orders.add(order);
+            const orderId = savedOrder.id;
 
-        // Save order items
-        const orderItems: Omit<OrderItem, 'id'>[] = cartItems.map((ci) => ({
-            order_id: orderId as number,
-            item_id: ci.item.id!,
-            item_name: ci.item.item_name,
-            qty: ci.qty,
-            unit_price: ci.unit_price,
-            discount: ci.discount,
-            total: ci.qty * ci.unit_price - ci.discount,
-        }));
-        await db.order_items.bulkAdd(orderItems);
-
-        let finalBillNumber = '';
-        if (!isQuote) {
-            // Deduct stock (parcels)
+            // Save order items
             for (const ci of cartItems) {
-                const current = await db.items.get(ci.item.id!);
-                if (current) {
-                    const newParcels = Math.max(0, current.stock_parcels - ci.qty);
-                    await db.items.update(ci.item.id!, {
-                        stock_parcels: newParcels,
-                        stock_units: current.p_unit * current.P_unit_per_parcel * newParcels,
-                    });
+                await DAL.order_items.add({
+                    order_id: orderId,
+                    item_id: ci.item.id!,
+                    item_name: ci.item.item_name,
+                    qty: ci.qty,
+                    unit_price: ci.unit_price,
+                    discount: ci.discount,
+                    total: ci.qty * ci.unit_price - ci.discount,
+                });
+            }
+
+            // Deduct stock if not quote
+            if (!isQuote) {
+                for (const ci of cartItems) {
+                    try {
+                        const current = await DAL.items.getById(ci.item.id!);
+                        if (current) {
+                            const newParcels = Math.max(0, (current.stock_parcels ?? 0) - ci.qty);
+                            await DAL.items.update(ci.item.id!, {
+                                stock_parcels: newParcels,
+                                stock_units: (current.p_unit ?? 1) * (current.P_unit_per_parcel ?? 1) * newParcels,
+                            });
+                        }
+                    } catch { /* item may not exist */ }
+                }
+
+                // Save bill record
+                await DAL.bills.add({
+                    order_id: orderId,
+                    bill_number: `INV-${new Date().getFullYear()}-${String(orderId).padStart(4, '0')}`,
+                    business_name: 'R.S. Enterprises',
+                    print_format: printFormat,
+                });
+            }
+
+            const finalOrder = { ...order, id: orderId };
+            setPrintOrder(finalOrder);
+            setShowPrintHandler(true);
+
+            const msg = isQuote ? `Quote #${orderId} created` : `Bill #${orderId} created`;
+            addToast(msg, 'success');
+            clearCart();
+            setPaidAmount(0);
+            refetchOrders();
+        } catch (error) {
+            console.error('Create order error:', error);
+            addToast('Failed to create order', 'error');
+        }
+    };
+
+    // Open saved bill
+    const handleOpenBill = async (order: Order) => {
+        setPrintOrder(order);
+        setShowPrintHandler(true);
+    };
+
+    // Delete bill
+    const handleDeleteBill = async (orderId: number) => {
+        if (!confirm('Delete this bill? This cannot be undone.')) return;
+        try {
+            await DAL.orders.delete(orderId);
+            addToast('Bill deleted', 'success');
+            refetchOrders();
+        } catch (error) {
+            addToast('Failed to delete bill', 'error');
+        }
+    };
+
+    // Update payment
+    const handleUpdatePayment = async (orderId: number, newPaidAmount: number) => {
+        try {
+            const order = orders.find(o => o.id === orderId);
+            if (!order) return;
+
+            const newDue = Math.max(0, order.grand_total - newPaidAmount);
+            const newStatus: 'unpaid' | 'partial' | 'paid' =
+                newPaidAmount >= order.grand_total ? 'paid' : newPaidAmount > 0 ? 'partial' : 'unpaid';
+
+            await DAL.orders.update(orderId, {
+                paid_amount: newPaidAmount,
+                due_amount: newDue,
+                payment_status: newStatus,
+            });
+
+            addToast('Payment updated', 'success');
+            refetchOrders();
+        } catch (error) {
+            addToast('Failed to update payment', 'error');
+        }
+    };
+
+    // Clear bill (mark as paid)
+    const handleClearBill = async (orderId: number) => {
+        try {
+            const order = orders.find(o => o.id === orderId);
+            if (!order) return;
+
+            await DAL.orders.update(orderId, {
+                paid_amount: order.grand_total,
+                due_amount: 0,
+                payment_status: 'paid',
+            });
+
+            addToast('Bill marked as paid', 'success');
+            refetchOrders();
+        } catch (error) {
+            addToast('Failed to clear bill', 'error');
+        }
+    };
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Alt+S = Save
+            if (e.altKey && e.key === 's') {
+                e.preventDefault();
+                if (activeTab === 'new' && cartItems.length > 0) {
+                    handleCreateOrder(false);
                 }
             }
-
-            // Save bill record
-            finalBillNumber = `INV-${new Date().getFullYear()}-${String(orderId).padStart(4, '0')}`;
-            await db.bills.add({
-                order_id: orderId as number,
-                bill_number: finalBillNumber,
-                business_name: activeBusiness,
-                print_format: printFormat,
-                createdAt: new Date().toISOString(),
-            });
-        }
-
-        // Show PrintHandler with the saved data
-        const savedOrder: Order = { ...order, id: orderId as number };
-        const savedCartItems = [...cartItems];
-        setPrintOrder(savedOrder);
-        setPrintCartItems(savedCartItems);
-        setShowPrintHandler(true);
-
-        const successMsg = isQuote ? `Quote #${orderId} created successfully` : `Order #${orderId} created — ${finalBillNumber}`;
-        addToast(successMsg, 'success');
-        clearCart();
-        setPaidAmount('');
-    };
-
-    // Open print handler for a saved order
-    const handleOpenSavedBill = async (order: Order) => {
-        const orderItemsData = await db.order_items.where('order_id').equals(order.id!).toArray();
-        // Convert order items back to CartItem format
-        const cartItemsFromOrder: CartItem[] = [];
-        for (const oi of orderItemsData) {
-            const item = await db.items.get(oi.item_id);
-            if (item) {
-                cartItemsFromOrder.push({
-                    item,
-                    qty: oi.qty,
-                    unit_price: oi.unit_price,
-                    discount: oi.discount,
-                });
+            // F10 = Print
+            if (e.key === 'F10') {
+                e.preventDefault();
+                if (activeTab === 'new' && cartItems.length > 0) {
+                    handleCreateOrder(false);
+                }
             }
-        }
+        };
 
-        setPrintOrder(order);
-        setPrintCartItems(cartItemsFromOrder);
-        setShowPrintHandler(true);
-    };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeTab, cartItems.length]);
 
-    const handleUpdateStatus = async (orderId: number, status: 'quote' | 'pending' | 'dispatched' | 'delivered' | 'cancelled') => {
-        await db.orders.update(orderId, { status });
-        addToast(`Order #${orderId} → ${status}`, 'success');
-    };
-
-    const handleConfirmQuote = async (order: Order) => {
-        if (!confirm('Convert this Quote to a Confirmed Bill? This will deduct inventory.')) return;
-
-        // Fetch order items to deduct stock
-        const orderItems = await db.order_items.where('order_id').equals(order.id!).toArray();
-        for (const oi of orderItems) {
-            const current = await db.items.get(oi.item_id);
-            if (current) {
-                const newParcels = Math.max(0, current.stock_parcels - oi.qty);
-                await db.items.update(oi.item_id, {
-                    stock_parcels: newParcels,
-                    stock_units: current.p_unit * current.P_unit_per_parcel * newParcels,
-                });
-            }
-        }
-
-        // Create bill
-        const billNumber = `INV-${new Date().getFullYear()}-${String(order.id).padStart(4, '0')}`;
-        await db.bills.add({
-            order_id: order.id!,
-            bill_number: billNumber,
-            business_name: activeBusiness || 'My Business',
-            print_format: printFormat,
-            createdAt: new Date().toISOString(),
-        });
-
-        // Update order status
-        await db.orders.update(order.id!, { status: 'pending' });
-        addToast(`Quote converted to Bill ${billNumber}`, 'success');
-    };
+    // Tab badges
+    const unpaidCount = orders.filter((o: any) => o.due_amount > 0 && o.payment_status !== 'paid').length;
 
     return (
-        <div className="animate-fade-in">
-            {/* Tab bar */}
-            <div className="flex border-b border-surface-300 mb-4">
+        <div className="h-full flex flex-col">
+            {/* Tab Navigation */}
+            <div className="flex items-center border-b border-surface-200 bg-white">
                 <button
                     onClick={() => setActiveTab('new')}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'new' ? 'border-surface-900 text-surface-900' : 'border-transparent text-surface-400 hover:text-surface-600'}`}
+                    className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'new'
+                        ? 'border-surface-900 text-surface-900'
+                        : 'border-transparent text-surface-500 hover:text-surface-700'
+                        }`}
                 >
-                    <ShoppingCart className="h-4 w-4 inline mr-1.5" /> New Bill
+                    <ShoppingCart className="h-4 w-4" />
+                    New Bill
                 </button>
                 <button
                     onClick={() => setActiveTab('saved')}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'saved' ? 'border-surface-900 text-surface-900' : 'border-transparent text-surface-400 hover:text-surface-600'}`}
+                    className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'saved'
+                        ? 'border-surface-900 text-surface-900'
+                        : 'border-transparent text-surface-500 hover:text-surface-700'
+                        }`}
                 >
-                    <FileText className="h-4 w-4 inline mr-1.5" /> Saved Bills ({orders.length})
+                    <FileText className="h-4 w-4" />
+                    Saved Bills
+                    {orders.length > 0 && (
+                        <span className="ml-1 text-xs bg-surface-200 text-surface-600 px-2 py-0.5 rounded-full">
+                            {orders.length}
+                        </span>
+                    )}
+                </button>
+                <button
+                    onClick={() => setActiveTab('unpaid')}
+                    className={`flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === 'unpaid'
+                        ? 'border-red-600 text-red-600'
+                        : 'border-transparent text-surface-500 hover:text-surface-700'
+                        }`}
+                >
+                    <AlertCircle className="h-4 w-4" />
+                    Unpaid
+                    {unpaidCount > 0 && (
+                        <span className="ml-1 text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
+                            {unpaidCount}
+                        </span>
+                    )}
                 </button>
             </div>
 
-            {activeTab === 'new' ? (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    {/* Left: Product Search + Cart */}
-                    <div className="lg:col-span-2 space-y-3">
-                        {/* Pricing Mode Toggle */}
-                        <div className="flex items-center gap-3">
-                            <span className="text-xs text-surface-500 font-medium">Pricing:</span>
-                            <div className="flex rounded-lg overflow-hidden border border-surface-300">
-                                <button
-                                    onClick={() => setPricingMode('retail')}
-                                    className={`px-4 py-1.5 text-xs font-medium transition-colors ${pricingMode === 'retail'
-                                        ? 'bg-surface-900 text-white'
-                                        : 'text-surface-500 hover:bg-surface-100'
-                                        }`}
-                                >
-                                    Lean (Retail)
-                                </button>
-                                <button
-                                    onClick={() => setPricingMode('wholesale')}
-                                    className={`px-4 py-1.5 text-xs font-medium transition-colors ${pricingMode === 'wholesale'
-                                        ? 'bg-surface-900 text-white'
-                                        : 'text-surface-500 hover:bg-surface-100'
-                                        }`}
-                                >
-                                    Bulk (Wholesale)
-                                </button>
-                            </div>
-                            <span className={paymentBadge.cls}>{paymentBadge.text}</span>
+            {/* Tab Content */}
+            <div className="flex-1 overflow-hidden">
+                {activeTab === 'new' && (
+                    <div className="h-full flex">
+                        {/* Left: 60% - Catalog & Search */}
+                        <div className="w-[60%] overflow-y-auto p-4 space-y-4">
+                            {/* Advanced Search */}
+                            <AdvancedSearch
+                                verticals={verticals}
+                                brands={brands}
+                                subcategories={subcategories}
+                                onSearch={handleSearch}
+                                isSearching={isSearching}
+                                resultsCount={searchResults.length}
+                            />
+
+                            {/* Results or Catalog */}
+                            {searchQuery || searchResults.length > 0 ? (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-sm font-semibold text-surface-900">
+                                            Search Results ({searchResults.length})
+                                        </h3>
+                                    </div>
+                                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-2.5">
+                                        {searchResults.map((item) => (
+                                            <ItemCard
+                                                key={item.id}
+                                                item={item}
+                                                pricingMode={pricingMode}
+                                                onAddToCart={addToCart}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <VerticalCatalog
+                                    items={items}
+                                    verticals={verticals}
+                                    pricingMode={pricingMode}
+                                    onAddToCart={addToCart}
+                                />
+                            )}
                         </div>
 
-                        {/* Item search */}
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400" />
-                            <input
-                                className="input-field pl-10"
-                                placeholder="Search items to add..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                        {/* Right: 40% - Bill Details Panel */}
+                        <div className="w-[40%] border-l border-surface-200">
+                            <BillDetailsPanel
+                                prospects={prospects}
+                                printFormat={printFormat}
+                                onPrintFormatChange={setPrintFormat}
+                                onSaveQuote={() => handleCreateOrder(true)}
+                                onSaveAndPrint={() => handleCreateOrder(false)}
                             />
                         </div>
-
-                        {/* Search results */}
-                        {filteredItems.length > 0 && (
-                            <div className="glass rounded-xl max-h-48 overflow-y-auto divide-y divide-surface-200">
-                                {filteredItems.map((item) => (
-                                    <div
-                                        key={item.id}
-                                        className="flex items-center justify-between px-4 py-2 hover:bg-surface-50 cursor-pointer transition-colors"
-                                        onClick={() => {
-                                            addToCart(item);
-                                            setSearchQuery('');
-                                            addToast(`${item.item_name} added`, 'info');
-                                        }}
-                                    >
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-medium truncate text-surface-900">{item.item_name}</p>
-                                            <p className="text-xs text-surface-400">
-                                                {item.category} · {item.stock_parcels} parcels
-                                            </p>
-                                        </div>
-                                        <div className="text-right ml-3 flex-shrink-0">
-                                            <p className="text-sm font-semibold text-surface-900">
-                                                Rs.{(pricingMode === 'wholesale' ? item.wholesale_price_container : item.retail_price_container).toFixed(2)}
-                                            </p>
-                                            <Plus className="h-4 w-4 text-surface-400 ml-auto" />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Cart items */}
-                        <div className="glass rounded-xl">
-                            <div className="px-4 py-3 border-b border-surface-200 flex items-center gap-2">
-                                <ShoppingCart className="h-4 w-4 text-surface-500" />
-                                <h3 className="font-semibold text-sm text-surface-900">Cart ({cartItems.length} items)</h3>
-                            </div>
-
-                            {cartItems.length === 0 ? (
-                                <p className="p-8 text-center text-surface-400 text-sm">
-                                    Search and add items to the cart
-                                </p>
-                            ) : (
-                                <div className="divide-y divide-surface-200">
-                                    {cartItems.map((ci) => (
-                                        <div key={ci.item.id} className="px-4 py-3 space-y-2">
-                                            <div className="flex items-start justify-between">
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-medium truncate text-surface-900">{ci.item.item_name}</p>
-                                                    <p className="text-xs text-surface-400">
-                                                        {ci.item.variant_param1_id && variantMap.has(ci.item.variant_param1_id) && (
-                                                            <span>{variantMap.get(ci.item.variant_param1_id)} · </span>
-                                                        )}
-                                                        {ci.item.category}
-                                                    </p>
-                                                </div>
-                                                <button onClick={() => removeFromCart(ci.item.id!)} className="p-1 hover:bg-red-50 rounded transition-colors">
-                                                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                                                </button>
-                                            </div>
-                                            <div className="flex items-center gap-3 flex-wrap">
-                                                {/* Qty controls */}
-                                                <div className="flex items-center gap-1 bg-surface-100 rounded-lg border border-surface-200">
-                                                    <button onClick={() => updateCartItemQty(ci.item.id!, ci.qty - 1)} className="text-surface-500 p-1 hover:bg-surface-200 rounded-l-lg">
-                                                        <Minus className="h-3 w-3" />
-                                                    </button>
-                                                    <input
-                                                        type="number"
-                                                        className="text-surface-500 w-12 bg-transparent text-center text-sm border-none focus:ring-0 p-1"
-                                                        value={ci.qty}
-                                                        onChange={(e) => updateCartItemQty(ci.item.id!, parseInt(e.target.value) || 1)}
-                                                    />
-                                                    <button onClick={() => updateCartItemQty(ci.item.id!, ci.qty + 1)} className="text-surface-500 p-1 hover:bg-surface-200 rounded-r-lg">
-                                                        <Plus className="h-3 w-3" />
-                                                    </button>
-                                                </div>
-
-                                                {/* Editable price */}
-                                                <div className="flex items-center gap-1">
-                                                    <span className="text-xs text-surface-400">Rs.</span>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        className="text-surface-500 w-20 bg-surface-100 border border-surface-200 rounded-lg text-sm text-center focus:ring-1 focus:ring-surface-900 p-1"
-                                                        value={ci.unit_price}
-                                                        onChange={(e) => updateCartItemPrice(ci.item.id!, parseFloat(e.target.value) || 0)}
-                                                    />
-                                                </div>
-
-                                                {/* Discount */}
-                                                <div className="flex items-center gap-1">
-                                                    <Tag className="h-3 w-3 text-surface-400" />
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        className="w-16 bg-surface-100 border border-surface-200 rounded-lg text-sm text-center focus:ring-1 focus:ring-surface-900 p-1"
-                                                        placeholder="Disc"
-                                                        value={ci.discount || ''}
-                                                        onChange={(e) => updateCartItemDiscount(ci.item.id!, parseFloat(e.target.value) || 0)}
-                                                    />
-                                                </div>
-
-                                                {/* Line total */}
-                                                <p className="text-sm font-semibold text-surface-900 ml-auto">
-                                                    Rs.{Math.max(0, ci.qty * ci.unit_price - ci.discount).toFixed(2)}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
                     </div>
+                )}
 
-                    {/* Right: Bill Summary */}
-                    <div className="space-y-3">
-                        {/* Prospect selector */}
-                        <div className="glass rounded-xl p-4 space-y-3">
-                            <div className="flex items-center gap-2">
-                                <User className="h-4 w-4 text-surface-500" />
-                                <h3 className="font-semibold text-sm text-surface-900">Customer</h3>
-                            </div>
-                            {selectedProspect ? (
-                                <div className="flex items-center justify-between bg-surface-50 rounded-lg px-3 py-2">
-                                    <div>
-                                        <p className="text-sm font-medium text-surface-900">{selectedProspect.prospectname}</p>
-                                        <p className="text-xs text-surface-400">{selectedProspect.area_town}</p>
-                                    </div>
-                                    <button onClick={() => setSelectedProspect(null)}>
-                                        <X className="h-4 w-4 text-surface-400" />
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="relative">
-                                    <input
-                                        className="input-field text-sm"
-                                        placeholder="Search prospect..."
-                                        value={prospectQuery}
-                                        onChange={(e) => { setProspectQuery(e.target.value); setShowProspectSearch(true); }}
-                                        onFocus={() => setShowProspectSearch(true)}
-                                    />
-                                    {showProspectSearch && prospectQuery && (
-                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-surface-300 rounded-lg max-h-40 overflow-y-auto z-10 shadow-lg">
-                                            {filteredProspects.map((p) => (
-                                                <div
-                                                    key={p.id}
-                                                    className="px-3 py-2 hover:bg-surface-50 cursor-pointer text-sm text-surface-500"
-                                                    onClick={() => {
-                                                        setSelectedProspect(p);
-                                                        setShowProspectSearch(false);
-                                                        setProspectQuery('');
-                                                    }}
-                                                >
-                                                    {p.prospectname} — {p.area_town}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Print format */}
-                        <div className="glass rounded-xl p-4 space-y-2">
-                            <div className="flex items-center gap-2">
-                                <Printer className="h-4 w-4 text-surface-500" />
-                                <h3 className="font-semibold text-sm text-surface-900">Print Format</h3>
-                            </div>
-                            <div className="grid grid-cols-3 gap-1">
-                                {(['a4', 'thermal', 'rawbt'] as const).map((fmt) => (
-                                    <button
-                                        key={fmt}
-                                        onClick={() => setPrintFormat(fmt)}
-                                        className={`px-2 py-1.5 text-xs rounded-lg font-medium text-center transition-colors ${printFormat === fmt
-                                            ? 'bg-surface-900 text-white'
-                                            : 'bg-surface-100 text-surface-500 hover:bg-surface-200'
-                                            }`}
-                                    >
-                                        {fmt === 'a4' ? 'A4' : fmt === 'thermal' ? 'Thermal' : 'RawBT'}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Totals */}
-                        <div className="glass rounded-xl p-4 space-y-3">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-surface-500">Subtotal</span>
-                                <span className="text-surface-900">Rs.{subtotal.toFixed(2)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                                <span className="text-surface-500">Tax %</span>
-                                <input
-                                    type="number"
-                                    className="w-16 bg-surface-100 border border-surface-200 rounded text-right text-sm focus:ring-1 focus:ring-surface-900 px-2 py-1"
-                                    value={taxRate || ''}
-                                    onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
-                                    placeholder="0"
-                                />
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-surface-500">Tax Amount</span>
-                                <span className="text-surface-900">Rs.{taxAmt.toFixed(2)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                                <span className="text-surface-500">Discount</span>
-                                <input
-                                    type="number"
-                                    className="w-20 bg-surface-100 border border-surface-200 rounded text-right text-sm focus:ring-1 focus:ring-surface-900 px-2 py-1"
-                                    value={globalDiscount || ''}
-                                    onChange={(e) => setGlobalDiscount(parseFloat(e.target.value) || 0)}
-                                    placeholder="0"
-                                />
-                            </div>
-
-                            <div className="border-t border-surface-200 pt-2 flex justify-between font-bold text-lg">
-                                <span className="text-surface-900">Total</span>
-                                <span className="text-surface-900">Rs.{grandTotal.toFixed(2)}</span>
-                            </div>
-
-                            {/* Payment */}
-                            <div className="border-t border-surface-200 pt-3 space-y-2">
-                                <div className="flex items-center justify-between text-sm">
-                                    <span className="text-surface-500 flex items-center gap-1.5">
-                                        <CreditCard className="h-3.5 w-3.5" /> Paid Amount
-                                    </span>
-                                    <input
-                                        type="number"
-                                        className="text-surface-500 w-24 bg-surface-100 border border-surface-200 rounded text-right text-sm focus:ring-1 focus:ring-emerald-500 px-2 py-1"
-                                        value={paidAmount}
-                                        onChange={(e) => setPaidAmount(e.target.value ? parseFloat(e.target.value) : '')}
-                                        placeholder="0.00"
-                                    />
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-surface-500">Due Amount</span>
-                                    <span className={dueAmount > 0 ? 'text-red-600 font-semibold' : 'text-emerald-600'}>
-                                        Rs.{dueAmount.toFixed(2)}
-                                    </span>
-                                </div>
-                                <div className="flex justify-center">
-                                    <span className={paymentBadge.cls}>{paymentBadge.text}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-2 mt-4">
-                            <button
-                                onClick={() => handleCreateOrder(true)}
-                                disabled={cartItems.length === 0}
-                                className="btn-secondary flex-1 py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                                <FileText className="h-4 w-4" />
-                                Save Quote
-                            </button>
-                            <button
-                                onClick={() => handleCreateOrder(false)}
-                                disabled={cartItems.length === 0}
-                                className="btn-primary flex-1 py-3 text-sm flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                                <Printer className="h-4 w-4" />
-                                Save & Print
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            ) : (
-                /* ─── Saved Bills Tab ─── */
-                <div className="space-y-3">
-                    <div className="relative max-w-md">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400" />
-                        <input
-                            className="input-field pl-10"
-                            placeholder="Search orders by prospect or ID..."
-                            value={billSearch}
-                            onChange={(e) => setBillSearch(e.target.value)}
+                {activeTab === 'saved' && (
+                    <div className="h-full overflow-y-auto p-4">
+                        <SavedBillsView
+                            orders={orders as Order[]}
+                            onOpenBill={handleOpenBill}
+                            onDeleteBill={handleDeleteBill}
+                            onShareBill={(order) => {
+                                // TODO: Backend - Implement share functionality
+                                addToast('Share feature coming soon', 'info');
+                            }}
+                            onDownloadBill={(order) => {
+                                // TODO: Backend - Implement PDF download
+                                addToast('Download feature coming soon', 'info');
+                            }}
+                            onBulkDownload={(ids) => {
+                                // TODO: Backend - Implement bulk ZIP download
+                                addToast('Bulk download coming soon', 'info');
+                            }}
+                            onBulkShare={(ids) => {
+                                // TODO: Backend - Implement bulk share
+                                addToast('Bulk share coming soon', 'info');
+                            }}
                         />
                     </div>
+                )}
 
-                    {filteredOrders.length === 0 ? (
-                        <div className="glass rounded-xl p-12 text-center text-surface-400">
-                            No orders found
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {filteredOrders.map((order) => (
-                                <div key={order.id} className="glass rounded-xl p-4 space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm font-semibold text-surface-900">
-                                                Order #{order.id} — {order.prospect_name}
-                                            </p>
-                                            <p className="text-xs text-surface-400">
-                                                {new Date(order.order_date).toLocaleString('en-IN')} · {order.pricing_mode === 'wholesale' ? 'Bulk' : 'Lean'}
-                                            </p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-sm font-bold text-surface-900">Rs.{order.grand_total.toFixed(2)}</p>
-                                            <div className="flex gap-1 mt-1">
-                                                <span className={statusBadge(order.status)}>{order.status}</span>
-                                                <span className={{
-                                                    paid: 'badge-success',
-                                                    partial: 'badge-warning',
-                                                    unpaid: 'badge-danger',
-                                                }[order.payment_status]}>{order.payment_status}</span>
-                                            </div>
-                                        </div>
-                                    </div>
+                {activeTab === 'unpaid' && (
+                    <div className="h-full overflow-y-auto p-4">
+                        <UnpaidBillsView
+                            orders={orders as Order[]}
+                            onEditBill={handleOpenBill}
+                            onClearBill={handleClearBill}
+                            onUpdatePayment={handleUpdatePayment}
+                        />
+                    </div>
+                )}
+            </div>
 
-                                    {/* Due info */}
-                                    {order.due_amount > 0 && (
-                                        <p className="text-xs text-red-600">
-                                            Due: Rs.{order.due_amount.toFixed(2)} (Paid: Rs.{order.paid_amount.toFixed(2)})
-                                        </p>
-                                    )}
-
-                                    {/* Action buttons */}
-                                    <div className="flex items-center gap-2 pt-1">
-                                        <button
-                                            onClick={() => handleOpenSavedBill(order)}
-                                            className="btn-secondary text-xs flex items-center gap-1.5"
-                                        >
-                                            <Printer className="h-3.5 w-3.5" /> Print/Share
-                                        </button>
-                                        {order.status === 'quote' && (
-                                            <button
-                                                onClick={() => handleConfirmQuote(order)}
-                                                className="btn-primary text-xs flex items-center gap-1.5"
-                                            >
-                                                <CheckCircle className="h-3.5 w-3.5" /> Confirm Bill
-                                            </button>
-                                        )}
-                                        {order.status === 'pending' && (
-                                            <button
-                                                onClick={() => handleUpdateStatus(order.id!, 'dispatched')}
-                                                className="btn-ghost text-xs flex items-center gap-1.5"
-                                            >
-                                                <Truck className="h-3.5 w-3.5" /> Dispatched
-                                            </button>
-                                        )}
-                                        {order.status === 'dispatched' && (
-                                            <button
-                                                onClick={() => handleUpdateStatus(order.id!, 'delivered')}
-                                                className="btn-ghost text-xs flex items-center gap-1.5"
-                                            >
-                                                <CheckCircle className="h-3.5 w-3.5" /> Delivered
-                                            </button>
-                                        )}
-                                        {order.status !== 'pending' && (
-                                            <button
-                                                onClick={() => handleUpdateStatus(order.id!, 'pending')}
-                                                className="btn-ghost text-xs flex items-center gap-1.5 text-surface-400"
-                                            >
-                                                <RotateCcw className="h-3.5 w-3.5" /> Reset
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* PrintHandler overlay */}
+            {/* Print Handler Overlay */}
             {showPrintHandler && printOrder && (
                 <PrintHandler
-                    order={printOrder}
-                    items={printCartItems}
-                    onClose={() => { setShowPrintHandler(false); setPrintOrder(null); setPrintCartItems([]); }}
+                    order={printOrder as any}
+                    items={cartItems}
+                    onClose={() => {
+                        setShowPrintHandler(false);
+                        setPrintOrder(null);
+                    }}
                 />
             )}
         </div>

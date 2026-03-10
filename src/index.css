@@ -85,6 +85,10 @@ body {
     @apply w-full bg-white border border-surface-300 text-surface-900 rounded-lg px-3 py-2.5 placeholder:text-surface-400 focus:outline-none focus:ring-2 focus:ring-surface-900/20 focus:border-surface-900 transition-all duration-200;
   }
 
+  .label {
+    @apply text-sm font-medium text-surface-700 block mb-1;
+  }
+
   .badge {
     @apply inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full;
   }

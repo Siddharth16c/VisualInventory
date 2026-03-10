@@ -1,0 +1,261 @@
+{
+  "project": {
+    "name": "VisualInventory",
+    "description": "Multi-tenant inventory management system with 3D warehouse visualization",
+    "version": "1.0.0",
+    "generated": "2026-03-05"
+  },
+  "architecture": {
+    "frontend": {
+      "framework": "React 18",
+      "language": "TypeScript",
+      "build_tool": "Vite",
+      "state_management": "Zustand",
+      "routing": "React Router v6",
+      "styling": "Tailwind CSS"
+    },
+    "data_layer": {
+      "primary": "Supabase PostgreSQL with RLS",
+      "legacy": "Dexie/IndexedDB",
+      "storage": "Supabase Storage",
+      "caching": "In-memory session management"
+    },
+    "visualization": {
+      "3d": "Three.js + @react-three/fiber",
+      "analytics": "D3.js hierarchy",
+      "media_processing": "FFmpeg Web Worker"
+    }
+  },
+  "database_schema": {
+    "multi_tenancy": {
+      "model": "firm_id UUID isolation",
+      "policy": "RLS with get_my_firm_id() function",
+      "global_tables": ["suppliers", "auth.users"],
+      "semi_global_tables": ["variant_params_1", "variant_params_2", "variant_params_3"]
+    },
+    "core_tables": {
+      "items": {
+        "critical_fields": [
+          "p_unit",
+          "P_unit_per_parcel", 
+          "stock_parcels",
+          "stock_units"
+        ],
+        "invariant": "stock_units = p_unit × P_unit_per_parcel × stock_parcels",
+        "variant_dimensions": [
+          "variant_param1_id (Pages/Count)",
+          "variant_param2_id (Line Type/Sub-variant)",
+          "variant_param3_id (Item Size/Dimensions)"
+        ],
+        "relationships": {
+          "product_id": "products(id)",
+          "brand_id": "brands(id)",
+          "vertical_id": "verticals(id)",
+          "packing_unit_id": "packing_units(id)"
+        }
+      },
+      "orders": {
+        "status_flow": ["quote", "pending", "dispatched", "delivered", "cancelled"],
+        "pricing_modes": ["retail", "wholesale"],
+        "payment_status": ["unpaid", "partial", "paid"],
+        "denormalized_fields": ["prospect_name", "item_name"]
+      },
+      "warehouse": {
+        "layout": {
+          "dimensions": ["floors", "sections_per_floor", "rows_per_section", "cols_per_row"],
+          "spatial_key": "warehouse_id + floor + section + row_num + col_num"
+        },
+        "cells": {
+          "assignment": "item_id + parcel_count per cell",
+          "visualization": "parcel_count determines 3D box height"
+        }
+      }
+    },
+    "reference_data": {
+      "hierarchy": {
+        "verticals": ["Stationery", "Cutlery", "Fireworks", "FMCG"],
+        "brands": ["Reegal", "Prime", "Supreme", "Fancy", "Kings AK"],
+        "products": ["Notebooks", "Pens", "Sky Shot", "Flower Pot"],
+        "packing_units": ["dozen", "box-5", "box-10", "bundle-12", "carton-50"]
+      }
+    }
+  },
+  "data_flow": {
+    "event_system": {
+      "pattern": "emitDbChange(table) → useSupabaseLiveQuery → UI refresh",
+      "no_realtime": "Refresh is mutation-driven, not subscription-based",
+      "critical_for_changes": "Schema modifications must preserve event flow"
+    },
+    "access_patterns": {
+      "supabase_primary": [
+        "All business logic routes",
+        "RLS enforcement",
+        "Event-driven updates"
+      ],
+      "dexie_legacy": [
+        "Media management (product_media)",
+        "Reports KPI tab",
+        "Maintenance utilities",
+        "Backup/import functionality"
+      ]
+    },
+    "session_management": {
+      "firm_resolution": "URL-based subdomain mapping",
+      "roles": ["master_admin", "store_owner"],
+      "context": "In-memory firm_id and role in DAL"
+    }
+  },
+  "critical_constraints": {
+    "stock_formula": {
+      "description": "3-level stock tracking invariant",
+      "formula": "stock_units = p_unit × P_unit_per_parcel × stock_parcels",
+      "usage": [
+        "Billing stock deduction logic",
+        "Inventory view displays",
+        "Warehouse cell assignments"
+      ],
+      "impact": "BREAKING if modified"
+    },
+    "multi_tenancy": {
+      "requirements": [
+        "All tenant tables must have firm_id",
+        "RLS policies enforce isolation",
+        "Only suppliers table is truly global"
+      ],
+      "policy_template": "firm_id = get_my_firm_id()"
+    },
+    "foreign_keys": {
+      "strategy": "Most use ON DELETE SET NULL or ON DELETE CASCADE",
+      "importance": "Critical for reporting and analytics",
+      "indexes": "Composite indexes on (firm_id, created_at)"
+    },
+    "denormalization": {
+      "fields": [
+        "prospect_name in orders",
+        "item_name in order_items",
+        "Vertical/Brand names in analytics"
+      ],
+      "purpose": "Performance optimization for reporting queries"
+    }
+  },
+  "module_requirements": {
+    "billing": {
+      "stock_logic": "Bill line qty treated as parcels for stock decrement",
+      "pricing": "Retail vs wholesale mode switches default per-line prices",
+      "status_flow": "Quote → Pending → Dispatched → Delivered"
+    },
+    "warehouse": {
+      "spatial": "Items assigned to specific warehouse cells",
+      "visualization": "Parcel count determines 3D box height",
+      "search": "Item location lookup across warehouse cells"
+    },
+    "media": {
+      "dual_storage": "Item metadata in Supabase, media files in Dexie",
+      "storage_path": "firm_id/item_id/filename.webp",
+      "roles": ["primary", "gallery", "flipbook", "gif", "video"]
+    },
+    "analytics": {
+      "brand_metrics": "Revenue aggregation by brand with vertical context",
+      "account_flow": "Revenue vs costs vs profit calculations",
+      "visualizations": "D3 hierarchy + Three.js for treemaps and arc diagrams"
+    }
+  },
+  "migration_touchpoints": {
+    "dexie_to_supabase": {
+      "active_usage": [
+        "src/pages/Media.tsx",
+        "src/pages/Reports.tsx (KPI tab)",
+        "src/pages/Maintenance.tsx",
+        "src/components/BulkImportModal.tsx"
+      ],
+      "strategy": "Gradual migration with backward compatibility"
+    },
+    "schema_evolution": {
+      "backward_compatibility": "Maintain existing API contracts",
+      "data_migration": "Preserve stock formula calculations",
+      "event_flow": "Ensure emitDbChange continues to work",
+      "rls_policies": "Update policies for new table structures"
+    },
+    "performance": {
+      "indexes": "Composite indexes on frequently queried columns",
+      "queries": "Use specific columns instead of SELECT *",
+      "pagination": "Implement for large datasets"
+    }
+  },
+  "change_impact_analysis": {
+    "high_impact": [
+      "Variant Parameters - affects SKU flexibility and UI dropdowns",
+      "Stock Formula - modifications break inventory calculations",
+      "Multi-Tenancy - RLS policy changes affect data isolation",
+      "Event System - changes to emitDbChange break reactive updates"
+    ],
+    "medium_impact": [
+      "Reference Data - changes affect categorization",
+      "Pricing Fields - modifications impact billing and reporting",
+      "Warehouse Schema - spatial data changes affect 2D/3D views"
+    ],
+    "low_impact": [
+      "Metadata Fields - JSON columns for flexible storage",
+      "Audit Fields - created_at, updated_at timestamps",
+      "Optional Fields - fields with NULL defaults"
+    ]
+  },
+  "redesign_principles": {
+    "preserve_invariants": [
+      "Never break the 3-level stock calculation",
+      "Always include firm_id where appropriate",
+      "Maintain reactive update mechanism",
+      "Preserve FK relationships and constraints"
+    ],
+    "enhance_flexibility": [
+      "Keep the 3-dimension variant approach",
+      "Use JSON columns for domain-specific attributes",
+      "Consider soft deletes for critical business data",
+      "Plan for schema version compatibility"
+    ],
+    "performance_optimization": [
+      "Composite indexes on (firm_id, frequently filtered columns)",
+      "Optimize for common reporting queries",
+      "Use appropriate data types and constraints",
+      "Leverage in-memory session data effectively"
+    ]
+  },
+  "file_structure": {
+    "database_layer": [
+      "src/db/dal.ts - Primary data access layer (Supabase)",
+      "src/db/types.ts - TypeScript interfaces",
+      "src/db/dexie.ts - Legacy Dexie schema and migrations",
+      "docs/supabase_schema.sql - Canonical PostgreSQL schema"
+    ],
+    "business_logic": [
+      "src/pages/Billing.tsx - Order creation and stock management",
+      "src/pages/DBEditor.tsx - Spreadsheet-style CRUD interface",
+      "src/pages/Warehouse.tsx - Spatial inventory management",
+      "src/pages/Analytics.tsx - Data visualization and reporting"
+    ],
+    "configuration": [
+      "src/config/firmConfig.ts - Multi-tenancy URL resolution",
+      "src/db/supabase.ts - Database connection setup",
+      "src/store/store.ts - Application state management"
+    ]
+  },
+  "key_invariants": {
+    "stock_calculation": "stock_units = p_unit × P_unit_per_parcel × stock_parcels",
+    "tenant_isolation": "firm_id present on all tenant tables with RLS",
+    "event_driven_updates": "emitDbChange triggers UI refreshes",
+    "variant_flexibility": "Three configurable dimensions per SKU",
+    "data_integrity": "FK relationships preserved across operations"
+  },
+  "model_context": {
+    "purpose": "Provide essential context for AI models to understand system architecture",
+    "usage": "Load this JSON for context when making database or architectural changes",
+    "critical_info": [
+      "Multi-tenancy model and RLS requirements",
+      "Stock formula invariant that must be preserved",
+      "Event-driven architecture pattern",
+      "Hybrid data access (Supabase + Dexie)",
+      "Variant parameter flexibility design"
+    ],
+    "change_safety": "Refer to change_impact_analysis before making modifications"
+  }
+}
