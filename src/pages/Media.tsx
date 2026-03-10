@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type ProductMedia } from '@/db/dexie';
-import { useSupabaseLiveQuery } from '@/hooks/useLiveQuery';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 import { DAL } from '@/db/dal';
 import { useAppStore } from '@/store/store';
 import imageCompression from 'browser-image-compression';
@@ -10,8 +10,8 @@ import { Upload, Image as ImageIcon, Film, Trash2, Download, Share2, Loader2, X,
 
 export default function Media() {
     // Items + products from Supabase
-    const items = useSupabaseLiveQuery(useCallback(() => DAL.items.getAll(), []), [], ['items']) as any[];
-    const allProducts = useSupabaseLiveQuery(useCallback(() => DAL.products.getAll(), []), [], ['products']) as any[];
+    const items = useSupabaseQuery(['items'], () => DAL.items.getAll(), []) as any[];
+    const allProducts = useSupabaseQuery(['products'], () => DAL.products.getAll(), []) as any[];
     const addToast = useAppStore((s) => s.addToast);
     const activeBusiness = useAppStore((s) => s.activeBusiness);
     const { isProcessing, ffmpegProgress, setIsProcessing, setFFmpegProgress, setProcessingMessage, processingMessage } = useAppStore();

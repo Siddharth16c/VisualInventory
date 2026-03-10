@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { DAL } from '@/db/dal';
+import { DAL, getFirmId } from '@/db/dal';
+import { supabase } from '@/db/supabase';
 import { useAppStore } from '@/store/store';
 import {
     Database, Plus, Save, Trash2, RefreshCw, Check, Copy, ChevronDown,
+    Play, X, Zap, Circle, Save as SaveIcon,
 } from 'lucide-react';
 
-// ─── Column definitions ──────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────
 interface ColDef {
     name: string;
     header: string;
@@ -18,6 +20,24 @@ interface ColDef {
     width?: number;
 }
 
+interface SavedControl {
+    id: string;
+    label: string;
+    description: string;
+    query: string;
+    table: string;
+    type: 'read' | 'write';
+}
+
+interface QueryResult {
+    columns: string[];
+    rows: Record<string, any>[];
+    count: number;
+    duration: number;
+    error?: string;
+}
+
+// ─── Column definitions (your original, + new tables added) ──────
 const TABLE_COLUMNS: Record<string, ColDef[]> = {
     verticals: [
         { name: 'name', header: 'Vertical Name', type: 'text', required: true, hint: 'e.g. Stationery, Fireworks', width: 260 },
@@ -61,6 +81,9 @@ const TABLE_COLUMNS: Record<string, ColDef[]> = {
         { name: 'retail_price_container', header: 'Price/Pkg ₹', type: 'number', defaultValue: 0, width: 100 },
         { name: 'wholesale_price_unit', header: 'WS/Unit ₹', type: 'number', defaultValue: 0, width: 100 },
         { name: 'wholesale_price_container', header: 'WS/Pkg ₹', type: 'number', defaultValue: 0, width: 100 },
+        { name: 'mrp', header: 'MRP ₹', type: 'number', defaultValue: 0, width: 90 },
+        { name: 'reorder_threshold', header: 'Reorder At', type: 'number', defaultValue: 0, width: 90 },
+        { name: 'purchase_price_unit', header: 'Cost/Unit ₹', type: 'number', defaultValue: 0, width: 100 },
     ],
     prospects: [
         { name: 'prospectname', header: 'Customer Name', type: 'text', required: true, width: 200 },
@@ -108,7 +131,7 @@ const TABLE_COLUMNS: Record<string, ColDef[]> = {
     ],
     account: [
         { name: 'month_year', header: 'Month/Year', type: 'text', width: 120 },
-        { name: 'revenue', header: 'Revenue ₹', type: 'number', width: 120 },
+        { name: 'total_revenue', header: 'Revenue ₹', type: 'number', width: 120 },
         { name: 'total_cost', header: 'Cost ₹', type: 'number', width: 120 },
         { name: 'profit', header: 'Profit ₹', type: 'number', width: 120 },
     ],
@@ -117,30 +140,75 @@ const TABLE_COLUMNS: Record<string, ColDef[]> = {
         { name: 'total_cost', header: 'Total ₹', type: 'number', width: 120 },
         { name: 'status', header: 'Status', type: 'text', width: 100 },
     ],
+    // ── New location tables ──────────────────────────────────────
+    storage_places: [
+        { name: 'place_name', header: 'Place Name', type: 'text', required: true, hint: 'e.g. KT Shop', width: 200 },
+        { name: 'place_slug', header: 'Slug', type: 'text', required: true, hint: 'e.g. KT', width: 100 },
+        { name: 'place_type', header: 'Type', type: 'text', hint: 'shop / warehouse / godown', width: 130 },
+        { name: 'floor_count', header: 'Floors', type: 'number', defaultValue: 1, width: 80 },
+        { name: 'notes', header: 'Notes', type: 'text', width: 200 },
+    ],
+    storage_zones: [
+        { name: 'place_id', header: 'Place', type: 'select', fkTable: 'storage_places', fkLabel: 'place_name', width: 160 },
+        { name: 'floor_num', header: 'Floor', type: 'number', defaultValue: 0, width: 80 },
+        { name: 'zone_name', header: 'Zone Name', type: 'text', required: true, hint: 'e.g. Front Section', width: 180 },
+        { name: 'zone_slug', header: 'Slug', type: 'text', required: true, hint: 'e.g. FR', width: 80 },
+        { name: 'notes', header: 'Notes', type: 'text', width: 180 },
+    ],
+    storage_slots: [
+        { name: 'zone_id', header: 'Zone', type: 'select', fkTable: 'storage_zones', fkLabel: 'zone_label', width: 160 },
+        { name: 'slot_name', header: 'Slot Name', type: 'text', required: true, hint: 'e.g. Stack A', width: 180 },
+        { name: 'capacity_parcels', header: 'Capacity', type: 'number', width: 100 },
+        { name: 'notes', header: 'Notes', type: 'text', width: 180 },
+    ],
 };
 
 const TABLE_LIST = [
     { group: 'Reference Data', tables: ['verticals', 'brands', 'products', 'packing_units', 'variant_params_1', 'variant_params_2', 'variant_params_3'] },
     { group: 'Inventory', tables: ['items'] },
+    { group: 'Locations', tables: ['storage_places', 'storage_zones', 'storage_slots'] },
     { group: 'CRM', tables: ['prospects', 'routes', 'visits'] },
     { group: 'Sales', tables: ['orders', 'bills'] },
     { group: 'Procurement', tables: ['suppliers', 'purchase_orders'] },
     { group: 'Finance', tables: ['costs', 'account'] },
 ];
 
-const EDITABLE_TABLES = new Set(['verticals', 'brands', 'products', 'packing_units', 'items', 'prospects', 'routes', 'costs', 'suppliers', 'visits', 'purchase_orders', 'variant_params_1', 'variant_params_2', 'variant_params_3']);
+const EDITABLE_TABLES = new Set([
+    'verticals', 'brands', 'products', 'packing_units', 'items',
+    'prospects', 'routes', 'costs', 'suppliers', 'visits', 'purchase_orders',
+    'variant_params_1', 'variant_params_2', 'variant_params_3',
+    'storage_places', 'storage_zones', 'storage_slots',
+]);
 
 const TABLE_LABELS: Record<string, string> = {
     verticals: 'Verticals', brands: 'Brands', products: 'Products', packing_units: 'Packing Units',
-    items: 'Items', prospects: 'Prospects', routes: 'Routes', suppliers: 'Suppliers', costs: 'Costs',
-    orders: 'Orders', bills: 'Bills', visits: 'Visits', account: 'Account',
+    items: 'Items / SKUs', prospects: 'Prospects', routes: 'Routes', suppliers: 'Suppliers',
+    costs: 'Costs', orders: 'Orders', bills: 'Bills', visits: 'Visits', account: 'Account',
     purchase_orders: 'Purchase Orders',
     variant_params_1: 'Sizes (VP1)', variant_params_2: 'Frequency (VP2)', variant_params_3: 'Specs (VP3)',
+    storage_places: 'Storage Places', storage_zones: 'Storage Zones', storage_slots: 'Storage Slots',
 };
 
-// ─── Main Component ──────────────────────────────────────────────
+// Columns that are auto-generated or system-managed — stripped before save
+const SYSTEM_COLS = new Set([
+    '_key', 'firm_id', 'created_at', 'updated_at',
+    'keyword_id', 'tsvector_search', 'zone_label', 'slot_label',
+]);
+
+const CONTROLS_KEY = 'db_editor_controls_v2';
+function loadControls(): SavedControl[] {
+    try { return JSON.parse(localStorage.getItem(CONTROLS_KEY) ?? '[]'); }
+    catch { return []; }
+}
+function persistControls(c: SavedControl[]) {
+    localStorage.setItem(CONTROLS_KEY, JSON.stringify(c));
+}
+
+// ─── Main Component ───────────────────────────────────────────────
 export default function DBEditor() {
-    const addToast = useAppStore(s => s.addToast);
+    const addToast = useAppStore((s) => s.addToast);
+
+    // ── Spreadsheet state (your original) ────────────────────────
     const [selectedTable, setSelectedTable] = useState('verticals');
     const [rows, setRows] = useState<any[]>([]);
     const [fkData, setFkData] = useState<Record<string, any[]>>({});
@@ -150,25 +218,43 @@ export default function DBEditor() {
     const [activeCell, setActiveCell] = useState<{ rowKey: string; col: string } | null>(null);
     const tableRef = useRef<HTMLDivElement>(null);
 
+    // ── Query constructor state ───────────────────────────────────
+    const [queryText, setQueryText] = useState('');
+    const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
+    const [isRunning, setIsRunning] = useState(false);
+    const [controls, setControls] = useState<SavedControl[]>(loadControls);
+    const [showSaveForm, setShowSaveForm] = useState(false);
+    const [newLabel, setNewLabel] = useState('');
+    const [newDesc, setNewDesc] = useState('');
+    const [copiedId, setCopiedId] = useState<string | null>(null);
+
+    // ── Paste Rows modal state ────────────────────────────────────
+    const [showPasteModal, setShowPasteModal] = useState(false);
+    const [pasteText, setPasteText] = useState('');
+    const [pastePreview, setPastePreview] = useState<{ headers: string[]; rows: any[][] } | null>(null);
+    const [isPasting, setIsPasting] = useState(false);
+
     const colDefs = TABLE_COLUMNS[selectedTable] ?? [];
     const isEditable = EDITABLE_TABLES.has(selectedTable);
 
-    // Load FK dropdown data
+    // ── Load FK dropdown data ─────────────────────────────────────
     useEffect(() => {
-        const fkTables = [...new Set(colDefs.filter(c => c.fkTable).map(c => c.fkTable!))];
-        Promise.all(fkTables.map(async t => {
-            const dal = (DAL as any)[t];
-            if (!dal?.getAll) return [t, []];
-            const data = await dal.getAll().catch(() => []);
-            return [t, data];
-        })).then(results => {
+        const fkTables = [...new Set(colDefs.filter((c) => c.fkTable).map((c) => c.fkTable!))];
+        Promise.all(
+            fkTables.map(async (t) => {
+                const dal = (DAL as any)[t];
+                if (!dal?.getAll) return [t, []];
+                const data = await dal.getAll().catch(() => []);
+                return [t, data];
+            })
+        ).then((results) => {
             const map: Record<string, any[]> = {};
             results.forEach(([t, data]) => { map[t as string] = data as any[]; });
             setFkData(map);
         });
     }, [selectedTable]);
 
-    // Load rows
+    // ── Load rows ─────────────────────────────────────────────────
     const loadRows = useCallback(async () => {
         setLoading(true);
         try {
@@ -177,6 +263,7 @@ export default function DBEditor() {
             const data = await dal.getAll();
             setRows((data ?? []).map((r: any, i: number) => ({ ...r, _key: r.id ?? `row-${i}` })));
             setIsDirty(false);
+            setQueryResult(null);
         } catch (e: any) {
             addToast(`Load error: ${e.message}`, 'error');
         } finally {
@@ -186,58 +273,53 @@ export default function DBEditor() {
 
     useEffect(() => { loadRows(); }, [loadRows]);
 
+    // Default query when table changes
+    useEffect(() => {
+        setQueryText(`SELECT * FROM ${selectedTable} LIMIT 100;`);
+    }, [selectedTable]);
+
+    // ── Cell / row operations (your original logic, unchanged) ────
     const updateCell = (rowKey: string, field: string, val: any) => {
-        setRows(prev => prev.map(r => r._key === rowKey ? { ...r, [field]: val } : r));
+        setRows((prev) => prev.map((r) => r._key === rowKey ? { ...r, [field]: val } : r));
         setIsDirty(true);
     };
 
     const addRow = () => {
         const newRow: any = { _key: `new-${Date.now()}` };
-        colDefs.forEach(c => { newRow[c.name] = c.defaultValue ?? (c.type === 'number' ? 0 : ''); });
-        setRows(prev => [...prev, newRow]);
+        colDefs.forEach((c) => { newRow[c.name] = c.defaultValue ?? (c.type === 'number' ? 0 : ''); });
+        setRows((prev) => [...prev, newRow]);
         setIsDirty(true);
-        // Scroll to bottom
         setTimeout(() => tableRef.current?.scrollTo({ top: tableRef.current.scrollHeight, behavior: 'smooth' }), 50);
     };
 
     const duplicateRow = (rowKey: string) => {
-        const source = rows.find(r => String(r._key) === rowKey);
+        const source = rows.find((r) => String(r._key) === rowKey);
         if (!source) return;
-        const { _key, id, created_at, updated_at, ...rest } = source;
+        const { _key, id, created_at, updated_at, keyword_id, zone_label, slot_label, ...rest } = source;
         const dup: any = { ...rest, _key: `new-${Date.now()}` };
-        const idx = rows.findIndex(r => String(r._key) === rowKey);
-        setRows(prev => {
-            const next = [...prev];
-            next.splice(idx + 1, 0, dup);
-            return next;
-        });
+        const idx = rows.findIndex((r) => String(r._key) === rowKey);
+        setRows((prev) => { const next = [...prev]; next.splice(idx + 1, 0, dup); return next; });
         setIsDirty(true);
         addToast('Row duplicated — edit and save', 'info');
     };
 
     const deleteRow = (rowKey: string) => {
-        const row = rows.find(r => String(r._key) === rowKey);
+        const row = rows.find((r) => String(r._key) === rowKey);
         if (!row) return;
         if (row.id && !confirm('Delete this row permanently?')) return;
         (async () => {
             if (row.id) {
-                try {
-                    const dal = (DAL as any)[selectedTable];
-                    await dal.delete(row.id);
-                } catch (e: any) {
-                    addToast(`Delete error: ${e.message}`, 'error');
-                    return;
-                }
+                try { await (DAL as any)[selectedTable].delete(row.id); }
+                catch (e: any) { addToast(`Delete error: ${e.message}`, 'error'); return; }
             }
-            setRows(prev => prev.filter(r => String(r._key) !== rowKey));
+            setRows((prev) => prev.filter((r) => String(r._key) !== rowKey));
             addToast('Row deleted', 'success');
         })();
     };
 
     const saveAll = async () => {
-        // Validate required fields in UI before sending to DB
         for (const row of rows) {
-            for (const col of colDefs.filter(c => c.required)) {
+            for (const col of colDefs.filter((c) => c.required)) {
                 const v = row[col.name];
                 if (v === null || v === undefined || v === '') {
                     addToast(`"${col.header}" is required — fill all highlighted cells`, 'error');
@@ -248,35 +330,56 @@ export default function DBEditor() {
         setSaving(true);
         try {
             const dal = (DAL as any)[selectedTable];
-            // Strip UI-only and system columns — DAL handles firm_id, timestamps
-            const SYSTEM_COLS = new Set(['_key', 'firm_id', 'created_at', 'updated_at']);
-            const clean = rows.map(row => {
+
+            // Split into new rows (no id) and existing rows (have id)
+            // This prevents bulkUpsert from trying onConflict: 'id' with id=undefined,
+            // which causes "Missing required field: id" on Postgres GENERATED ALWAYS columns.
+            const newRows: any[] = [];
+            const existingRows: any[] = [];
+
+            rows.forEach((row) => {
                 const out: any = {};
                 for (const [k, v] of Object.entries(row)) {
                     if (SYSTEM_COLS.has(k)) continue;
-                    // Strip id for NEW rows so Supabase auto-generates it
-                    if (k === 'id' && !v) continue;
+                    if (k === 'id' && !v) continue; // strip falsy id
                     out[k] = v;
                 }
-                return out;
+                if (row.id) {
+                    existingRows.push(out);
+                } else {
+                    newRows.push(out);
+                }
             });
-            await dal.bulkUpsert(clean);
-            addToast(`✓ Saved ${clean.length} rows`, 'success');
+
+            // Insert new rows (no conflict key needed — DB auto-generates id)
+            if (newRows.length > 0) {
+                const toInsert = FIRM_SCOPED_TABLES.has(selectedTable) && getFirmId()
+                    ? newRows.map((r: any) => ({ ...r, firm_id: getFirmId() }))
+                    : newRows;
+                const { error } = await supabase.from(selectedTable).insert(toInsert);
+                if (error) throw error;
+            }
+
+            // Upsert existing rows (conflict on id)
+            if (existingRows.length > 0) {
+                await dal.bulkUpsert(existingRows);
+            }
+
+            addToast(`✓ Saved ${rows.length} row${rows.length !== 1 ? 's' : ''}`, 'success');
             loadRows();
         } catch (e: any) {
-            // Parse Supabase constraint errors into friendly messages
             const msg = e?.message ?? String(e);
             let friendly = msg;
             if (msg.includes('violates not-null constraint')) {
                 const col = msg.match(/column "(\w+)"/)?.[1];
-                friendly = `Missing required field: "${col}". This column cannot be empty.`;
+                friendly = `Missing required field: "${col}"`;
             } else if (msg.includes('violates foreign key constraint')) {
-                friendly = 'Invalid reference — the selected value doesn\'t exist in the related table.';
+                friendly = 'Invalid reference — selected value doesn\'t exist in related table';
             } else if (msg.includes('violates unique constraint')) {
-                friendly = 'Duplicate value — this value already exists and must be unique.';
+                friendly = 'Duplicate value — must be unique';
             } else if (msg.includes('invalid input syntax')) {
                 const type = msg.match(/for type (\w+)/)?.[1];
-                friendly = `Invalid data format for type "${type}". Check number/date fields.`;
+                friendly = `Invalid format for type "${type}"`;
             }
             addToast(`Save error: ${friendly}`, 'error');
         } finally {
@@ -284,32 +387,173 @@ export default function DBEditor() {
         }
     };
 
-    // FK display label
+    // ── Paste Rows logic ──────────────────────────────────────────
+    const parsePasteText = (text: string) => {
+        const lines = text.trim().split('\n').filter(Boolean);
+        if (lines.length === 0) return null;
+
+        // First line = headers (column names from Excel/Sheets)
+        const headers = lines[0].split('\t').map(h => h.trim().toLowerCase().replace(/\s+/g, '_'));
+        const dataRows = lines.slice(1).map(line =>
+            line.split('\t').map(cell => cell.trim())
+        );
+        return { headers, rows: dataRows };
+    };
+
+    const handlePasteTextChange = (text: string) => {
+        setPasteText(text);
+        if (!text.trim()) { setPastePreview(null); return; }
+        const parsed = parsePasteText(text);
+        setPastePreview(parsed);
+    };
+
+    const FIRM_SCOPED_TABLES = new Set([
+        'verticals', 'brands', 'products', 'packing_units', 'items',
+        'prospects', 'orders', 'bills', 'routes', 'visits',
+        'costs', 'account', 'purchase_orders', 'storage_places',
+        'storage_zones', 'storage_slots', 'subcategories',
+    ]);
+
+    const executePaste = async () => {
+        if (!pastePreview || pastePreview.rows.length === 0) return;
+        setIsPasting(true);
+        try {
+            const { headers, rows: dataRows } = pastePreview;
+            const colNames = colDefs.map(c => c.name);
+
+            // Map pasted headers to colDef field names (fuzzy match)
+            const headerMap: Record<number, string> = {};
+            headers.forEach((h, i) => {
+                // Exact match first
+                if (colNames.includes(h)) { headerMap[i] = h; return; }
+                // Partial match — e.g. "item name" → "item_name"
+                const match = colNames.find(c => c.includes(h) || h.includes(c));
+                if (match) headerMap[i] = match;
+            });
+
+            const mapped = dataRows.map(cells => {
+                const row: any = {};
+                cells.forEach((cell, i) => {
+                    const field = headerMap[i];
+                    if (!field) return;
+                    const colDef = colDefs.find(c => c.name === field);
+                    if (!colDef) return;
+                    // Type coercion
+                    if (colDef.type === 'number') {
+                        row[field] = cell === '' ? null : Number(cell.replace(/,/g, ''));
+                    } else {
+                        row[field] = cell === '' ? null : cell;
+                    }
+                });
+                return row;
+            }).filter(r => Object.keys(r).length > 0);
+
+            if (mapped.length === 0) {
+                addToast('No columns matched — check that your header row matches table column names', 'error');
+                return;
+            }
+
+            const dal = (DAL as any)[selectedTable];
+            await dal.bulkUpsert(mapped);
+            addToast(`✓ Pasted ${mapped.length} row${mapped.length !== 1 ? 's' : ''} into ${TABLE_LABELS[selectedTable]}`, 'success');
+            setShowPasteModal(false);
+            setPasteText('');
+            setPastePreview(null);
+            loadRows();
+        } catch (e: any) {
+            addToast(`Paste error: ${e.message}`, 'error');
+        } finally {
+            setIsPasting(false);
+        }
+    };
+
     const fkLabel = (col: ColDef, val: any): string => {
         if (!col.fkTable || val == null) return '';
         const item = (fkData[col.fkTable] ?? []).find((o: any) => o.id === val);
         return item?.[col.fkLabel!] ?? String(val);
     };
 
+    // ── Query constructor ─────────────────────────────────────────
+    const runQuery = async (sql: string = queryText) => {
+        if (!sql.trim()) return;
+        setIsRunning(true);
+        setQueryResult(null);
+        const t0 = performance.now();
+        try {
+            const { data, error } = await supabase.rpc('run_readonly_query', { sql_query: sql });
+            const duration = performance.now() - t0;
+            if (error) {
+                setQueryResult({ columns: [], rows: [], count: 0, duration, error: error.message });
+            } else {
+                const resultRows = Array.isArray(data) ? data : [data];
+                const cols = resultRows.length > 0 ? Object.keys(resultRows[0]) : [];
+                setQueryResult({ columns: cols, rows: resultRows, count: resultRows.length, duration });
+            }
+        } catch (e: any) {
+            setQueryResult({ columns: [], rows: [], count: 0, duration: performance.now() - t0, error: e.message });
+        } finally {
+            setIsRunning(false);
+        }
+    };
+
+    const saveControl = () => {
+        if (!newLabel.trim() || !queryText.trim()) return;
+        const ctrl: SavedControl = {
+            id: crypto.randomUUID(),
+            label: newLabel.trim(),
+            description: newDesc.trim(),
+            query: queryText.trim(),
+            table: selectedTable,
+            type: queryText.trim().toUpperCase().startsWith('SELECT') ? 'read' : 'write',
+        };
+        const updated = [...controls, ctrl];
+        setControls(updated);
+        persistControls(updated);
+        setNewLabel(''); setNewDesc(''); setShowSaveForm(false);
+        addToast(`Control "${ctrl.label}" saved`, 'success');
+    };
+
+    const deleteControl = (id: string) => {
+        const updated = controls.filter((c) => c.id !== id);
+        setControls(updated);
+        persistControls(updated);
+    };
+
+    const loadControlToEditor = (ctrl: SavedControl) => {
+        setQueryText(ctrl.query);
+        // Switch table if this control belongs to a different one
+        if (ctrl.table !== selectedTable) {
+            if (isDirty && !confirm('Unsaved changes. Switch table?')) return;
+            setSelectedTable(ctrl.table);
+            setActiveCell(null);
+        }
+        setCopiedId(ctrl.id);
+        setTimeout(() => setCopiedId(null), 1500);
+    };
+
+    const tableControls = controls.filter((c) => c.table === selectedTable);
+    const otherControls = controls.filter((c) => c.table !== selectedTable);
+
+    // ─────────────────────────────────────────────────────────────
     return (
         <div className="animate-fade-in flex flex-col" style={{ height: 'calc(100vh - 80px)' }}>
-            {/* ── Top Bar: Table selector + Actions ── */}
-            <div className="flex items-center gap-3 px-2 py-2 border-b border-surface-200 flex-shrink-0 flex-wrap">
+
+            {/* ── Top Bar (your original, + live indicator) ─────── */}
+            <div className="flex items-center gap-3 px-2 py-2 border-b border-surface-200 flex-shrink-0 flex-wrap bg-surface-50">
                 <Database className="h-4 w-4 text-brand-500 flex-shrink-0" />
 
-                {/* Table selector */}
                 <div className="relative">
                     <select
                         value={selectedTable}
-                        onChange={e => {
-                            if (isDirty && !confirm('You have unsaved changes. Switch table and lose them?')) return;
+                        onChange={(e) => {
+                            if (isDirty && !confirm('Unsaved changes. Switch table?')) return;
                             setSelectedTable(e.target.value); setActiveCell(null);
                         }}
                         className="appearance-none bg-surface-100 text-surface-900 text-sm font-semibold pl-3 pr-8 py-1.5 rounded-lg border border-surface-200 cursor-pointer focus:ring-2 focus:ring-brand-400 focus:outline-none"
                     >
-                        {TABLE_LIST.map(g => (
+                        {TABLE_LIST.map((g) => (
                             <optgroup key={g.group} label={g.group}>
-                                {g.tables.map(t => (
+                                {g.tables.map((t) => (
                                     <option key={t} value={t}>{TABLE_LABELS[t] ?? t}</option>
                                 ))}
                             </optgroup>
@@ -318,24 +562,36 @@ export default function DBEditor() {
                     <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-surface-400 pointer-events-none" />
                 </div>
 
-                <span className="text-xs text-surface-500">
+                <span className="text-xs text-surface-500 flex items-center gap-1.5">
                     {rows.length} record{rows.length !== 1 ? 's' : ''}
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" title="Connected" />
                 </span>
 
                 <div className="flex-1" />
 
                 {isEditable && (
                     <>
-                        <button onClick={addRow}
-                            className="text-xs flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100 transition-colors">
+                        <button
+                            onClick={addRow}
+                            className="text-xs flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100 transition-colors"
+                        >
                             <Plus className="h-3.5 w-3.5" /> Add Row
                         </button>
-
-                        <button onClick={saveAll} disabled={!isDirty || saving}
+                        <button
+                            onClick={() => setShowPasteModal(true)}
+                            className="text-xs flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
+                            title="Paste rows from Excel or Google Sheets"
+                        >
+                            <Copy className="h-3.5 w-3.5" /> Paste Rows
+                        </button>
+                        <button
+                            onClick={saveAll}
+                            disabled={!isDirty || saving}
                             className={`text-xs flex items-center gap-1.5 py-1.5 px-4 rounded-lg font-semibold transition-all ${isDirty
-                                ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm'
-                                : 'bg-surface-100 text-surface-400 cursor-default'
-                                }`}>
+                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm'
+                                    : 'bg-surface-100 text-surface-400 cursor-default'
+                                }`}
+                        >
                             {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : isDirty ? <Save className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
                             {saving ? 'Saving…' : isDirty ? 'Save All' : 'Saved'}
                         </button>
@@ -347,8 +603,8 @@ export default function DBEditor() {
                 </button>
             </div>
 
-            {/* ── Spreadsheet Grid ── */}
-            <div ref={tableRef} className="flex-1 overflow-auto min-h-0">
+            {/* ── TOP 70%: Spreadsheet Grid (your original, intact) ─ */}
+            <div ref={tableRef} className="overflow-auto bg-white" style={{ flex: '7 1 0', minHeight: 0 }}>
                 {loading ? (
                     <div className="flex items-center justify-center h-full text-surface-400 text-sm gap-2">
                         <RefreshCw className="h-4 w-4 animate-spin" /> Loading…
@@ -364,15 +620,19 @@ export default function DBEditor() {
                         )}
                     </div>
                 ) : (
-                    <table className="w-full border-collapse text-sm" style={{ minWidth: colDefs.reduce((s, c) => s + (c.width || 120), 100) }}>
-                        {/* Column headers */}
+                    <table
+                        className="w-full border-collapse text-sm"
+                        style={{ minWidth: colDefs.reduce((s, c) => s + (c.width || 120), 100) }}
+                    >
                         <thead className="sticky top-0 z-10">
                             <tr className="bg-surface-100 border-b border-surface-200">
                                 <th className="px-2 py-2 text-left text-[11px] font-semibold text-surface-500 uppercase tracking-wide w-[60px] bg-surface-100">#</th>
-                                {colDefs.map(col => (
-                                    <th key={col.name}
+                                {colDefs.map((col) => (
+                                    <th
+                                        key={col.name}
                                         className="px-2 py-2 text-left text-[11px] font-semibold text-surface-500 uppercase tracking-wide bg-surface-100 border-l border-surface-200"
-                                        style={{ minWidth: col.width || 120 }}>
+                                        style={{ minWidth: col.width || 120 }}
+                                    >
                                         <span className="flex items-center gap-1">
                                             {col.required && <span className="text-red-400">*</span>}
                                             {col.header}
@@ -386,36 +646,35 @@ export default function DBEditor() {
                                 )}
                             </tr>
                         </thead>
-
                         <tbody>
                             {rows.map((row, idx) => {
                                 const rowKey = String(row._key);
                                 const isNew = !row.id;
                                 return (
-                                    <tr key={rowKey}
-                                        className={`border-b border-surface-100 transition-colors ${isNew ? 'bg-amber-50/50' : idx % 2 === 0 ? 'bg-white' : 'bg-surface-50/50'} hover:bg-brand-50/30`}>
-                                        {/* Row number */}
+                                    <tr
+                                        key={rowKey}
+                                        className={`border-b border-surface-100 transition-colors ${isNew ? 'bg-amber-50/50' : idx % 2 === 0 ? 'bg-white' : 'bg-surface-50/50'
+                                            } hover:bg-brand-50/30`}
+                                    >
                                         <td className="px-2 py-1.5 text-xs text-surface-400 font-mono">
                                             {isNew ? <span className="text-amber-500 font-semibold text-[10px]">NEW</span> : idx + 1}
                                         </td>
-
-                                        {/* Data cells */}
-                                        {colDefs.map(col => {
-                                            const cellKey = `${rowKey}:${col.name}`;
+                                        {colDefs.map((col) => {
                                             const isActive = activeCell?.rowKey === rowKey && activeCell?.col === col.name;
                                             const val = row[col.name];
-
+                                            const isEmpty = col.required && (val === null || val === undefined || val === '');
                                             return (
-                                                <td key={col.name}
-                                                    className={`px-1 py-0.5 border-l border-surface-100 ${isActive ? 'ring-2 ring-inset ring-brand-400' : ''} ${col.required && (val === null || val === undefined || val === '') ? 'bg-red-50/50' : ''}`}
-                                                    onClick={() => isEditable && setActiveCell({ rowKey, col: col.name })}>
+                                                <td
+                                                    key={col.name}
+                                                    className={`px-1 py-0.5 border-l border-surface-100 ${isActive ? 'ring-2 ring-inset ring-brand-400' : ''} ${isEmpty ? 'bg-red-50/50' : ''}`}
+                                                    onClick={() => isEditable && setActiveCell({ rowKey, col: col.name })}
+                                                >
                                                     {isEditable && isActive ? (
-                                                        // Edit mode
                                                         col.type === 'select' ? (
                                                             <select
                                                                 autoFocus
                                                                 value={val ?? ''}
-                                                                onChange={e => updateCell(rowKey, col.name, e.target.value ? Number(e.target.value) : null)}
+                                                                onChange={(e) => updateCell(rowKey, col.name, e.target.value ? Number(e.target.value) : null)}
                                                                 onBlur={() => setActiveCell(null)}
                                                                 className="w-full bg-white text-surface-900 text-xs py-1 px-1.5 border-none outline-none"
                                                             >
@@ -431,15 +690,20 @@ export default function DBEditor() {
                                                                 inputMode={col.type === 'number' ? 'decimal' : undefined}
                                                                 value={val ?? ''}
                                                                 placeholder={col.hint || ''}
-                                                                onChange={e => updateCell(rowKey, col.name, col.type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value)}
+                                                                onChange={(e) => updateCell(
+                                                                    rowKey, col.name,
+                                                                    col.type === 'number'
+                                                                        ? (e.target.value === '' ? null : Number(e.target.value))
+                                                                        : e.target.value
+                                                                )}
                                                                 onBlur={() => setActiveCell(null)}
-                                                                onKeyDown={e => {
+                                                                onKeyDown={(e) => {
                                                                     if (e.key === 'Enter') setActiveCell(null);
                                                                     if (e.key === 'Tab') {
                                                                         e.preventDefault();
-                                                                        const colIdx = colDefs.findIndex(c => c.name === col.name);
-                                                                        if (colIdx < colDefs.length - 1) {
-                                                                            setActiveCell({ rowKey, col: colDefs[colIdx + 1].name });
+                                                                        const ci = colDefs.findIndex((c) => c.name === col.name);
+                                                                        if (ci < colDefs.length - 1) {
+                                                                            setActiveCell({ rowKey, col: colDefs[ci + 1].name });
                                                                         } else if (idx < rows.length - 1) {
                                                                             setActiveCell({ rowKey: String(rows[idx + 1]._key), col: colDefs[0].name });
                                                                         }
@@ -449,28 +713,33 @@ export default function DBEditor() {
                                                             />
                                                         )
                                                     ) : (
-                                                        // Display mode
                                                         <div className="text-xs text-surface-700 py-1 px-1.5 truncate cursor-cell min-h-[28px] flex items-center">
-                                                            {col.type === 'select' ? fkLabel(col, val) || <span className="text-surface-300">—</span> :
-                                                                val !== null && val !== undefined && val !== '' ? String(val) : <span className="text-surface-300">—</span>}
+                                                            {col.type === 'select'
+                                                                ? fkLabel(col, val) || <span className="text-surface-300">—</span>
+                                                                : (val !== null && val !== undefined && val !== '')
+                                                                    ? String(val)
+                                                                    : <span className="text-surface-300">—</span>
+                                                            }
                                                         </div>
                                                     )}
                                                 </td>
                                             );
                                         })}
-
-                                        {/* Action buttons */}
                                         {isEditable && (
                                             <td className="px-1 py-0.5 border-l border-surface-100 text-center">
                                                 <div className="flex items-center justify-center gap-0.5">
-                                                    <button onClick={() => duplicateRow(rowKey)}
+                                                    <button
+                                                        onClick={() => duplicateRow(rowKey)}
                                                         title="Duplicate row"
-                                                        className="p-1 rounded hover:bg-surface-200 transition-colors text-surface-400 hover:text-brand-600">
+                                                        className="p-1 rounded hover:bg-surface-200 transition-colors text-surface-400 hover:text-brand-600"
+                                                    >
                                                         <Copy className="h-3.5 w-3.5" />
                                                     </button>
-                                                    <button onClick={() => deleteRow(rowKey)}
+                                                    <button
+                                                        onClick={() => deleteRow(rowKey)}
                                                         title="Delete row"
-                                                        className="p-1 rounded hover:bg-red-50 transition-colors text-surface-400 hover:text-red-500">
+                                                        className="p-1 rounded hover:bg-red-50 transition-colors text-surface-400 hover:text-red-500"
+                                                    >
                                                         <Trash2 className="h-3.5 w-3.5" />
                                                     </button>
                                                 </div>
@@ -484,14 +753,316 @@ export default function DBEditor() {
                 )}
             </div>
 
-            {/* ── Status Bar ── */}
+            {/* ── BOTTOM 30%: Query Constructor + Controls ─────────
+                Matches layout from screenshot: left ~70% editor, right ~30% panel
+            ──────────────────────────────────────────────────────── */}
+            <div
+                className="flex border-t-2 border-surface-200 flex-shrink-0"
+                style={{ flex: '3 1 0', minHeight: 0 }}
+            >
+                {/* Left: Query Constructor */}
+                <div className="flex flex-col border-r border-surface-200" style={{ flex: '7 1 0', minWidth: 0 }}>
+
+                    {/* Query toolbar */}
+                    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-surface-100 bg-surface-50 flex-shrink-0 flex-wrap">
+                        <span className="text-[10px] font-semibold text-surface-400 tracking-widest uppercase mr-1">
+                            Query Constructor
+                        </span>
+
+                        {showSaveForm ? (
+                            <>
+                                <input
+                                    className="text-xs bg-white border border-surface-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 w-36"
+                                    placeholder="Control name"
+                                    value={newLabel}
+                                    onChange={(e) => setNewLabel(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && saveControl()}
+                                    autoFocus
+                                />
+                                <input
+                                    className="text-xs bg-white border border-surface-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 w-28"
+                                    placeholder="Short description"
+                                    value={newDesc}
+                                    onChange={(e) => setNewDesc(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && saveControl()}
+                                />
+                                <button
+                                    onClick={saveControl}
+                                    disabled={!newLabel.trim()}
+                                    className="text-xs px-3 py-1 bg-surface-900 text-white rounded-lg font-medium disabled:opacity-40 whitespace-nowrap"
+                                >
+                                    + Create Control
+                                </button>
+                                <button onClick={() => { setShowSaveForm(false); setNewLabel(''); setNewDesc(''); }}>
+                                    <X className="h-3.5 w-3.5 text-surface-400 hover:text-surface-600" />
+                                </button>
+                            </>
+                        ) : (
+                            <button
+                                onClick={() => setShowSaveForm(true)}
+                                disabled={!queryText.trim()}
+                                className="text-xs flex items-center gap-1 px-2.5 py-1 bg-white border border-surface-300 rounded-lg text-surface-600 hover:border-brand-300 hover:text-brand-600 transition-colors disabled:opacity-30 disabled:cursor-default"
+                            >
+                                <SaveIcon className="h-3 w-3" /> Save as Control
+                            </button>
+                        )}
+
+                        <div className="flex-1" />
+
+                        <button
+                            onClick={() => runQuery()}
+                            disabled={!queryText.trim() || isRunning}
+                            className="text-xs flex items-center gap-1.5 px-3 py-1.5 bg-surface-900 hover:bg-surface-700 text-white rounded-lg font-medium transition-colors disabled:opacity-40"
+                        >
+                            {isRunning
+                                ? <div className="h-3 w-3 border border-white border-t-transparent rounded-full animate-spin" />
+                                : <Play className="h-3 w-3" />
+                            }
+                            Run
+                        </button>
+                    </div>
+
+                    {/* SQL textarea — dark code editor feel */}
+                    <textarea
+                        className="flex-1 min-h-0 text-emerald-300 px-4 py-3 text-xs font-mono resize-none focus:outline-none placeholder:text-slate-600"
+                        style={{ background: '#0d1117' }}
+                        placeholder={`SELECT * FROM ${selectedTable} WHERE firm_id = get_my_firm_id() LIMIT 50;\n\n-- Ctrl+Enter to run`}
+                        value={queryText}
+                        onChange={(e) => setQueryText(e.target.value)}
+                        spellCheck={false}
+                        onKeyDown={(e) => {
+                            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                                e.preventDefault();
+                                runQuery();
+                            }
+                        }}
+                    />
+
+                    {/* Query result status bar */}
+                    {queryResult && (
+                        <div className={`flex items-center gap-2 px-3 py-1.5 text-xs border-t flex-shrink-0 ${queryResult.error
+                                ? 'bg-red-50 text-red-600 border-red-100'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                            }`}>
+                            <Circle className="h-2 w-2 fill-current flex-shrink-0" />
+                            {queryResult.error
+                                ? `Error: ${queryResult.error}`
+                                : `${queryResult.count} row${queryResult.count !== 1 ? 's' : ''} · ${queryResult.duration.toFixed(0)}ms`
+                            }
+                            {!queryResult.error && queryResult.rows.length > 0 && (
+                                <span className="text-emerald-500 ml-1">
+                                    — cols: {queryResult.columns.join(', ')}
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Right: Active Controls panel */}
+                <div className="flex flex-col bg-white" style={{ flex: '3 1 0', minWidth: 0, minHeight: 0 }}>
+                    <div className="flex items-center justify-between px-3 py-1.5 border-b border-surface-100 bg-surface-50 flex-shrink-0">
+                        <span className="text-[10px] font-semibold text-surface-400 tracking-widest uppercase">
+                            Active Controls
+                        </span>
+                        <span className="text-[10px] text-surface-300 truncate max-w-[100px]">
+                            {TABLE_LABELS[selectedTable]}
+                        </span>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-h-0">
+                        {/* Controls for current table */}
+                        {tableControls.length === 0 ? (
+                            <div className="text-center mt-4 px-2">
+                                <Zap className="h-5 w-5 text-surface-200 mx-auto mb-1.5" />
+                                <p className="text-[11px] text-surface-300 leading-snug">
+                                    No controls for<br />{TABLE_LABELS[selectedTable]}
+                                </p>
+                                <p className="text-[10px] text-surface-200 mt-1">
+                                    Write a query → Save as Control
+                                </p>
+                            </div>
+                        ) : (
+                            tableControls.map((ctrl) => (
+                                <div key={ctrl.id} className="group relative">
+                                    <button
+                                        onClick={() => { loadControlToEditor(ctrl); runQuery(ctrl.query); }}
+                                        className="w-full text-left p-2.5 rounded-lg border border-surface-200 hover:border-brand-300 hover:bg-brand-50/40 transition-all"
+                                    >
+                                        <div className="flex items-center gap-1.5 mb-0.5 pr-10">
+                                            <Zap className={`h-3 w-3 flex-shrink-0 ${ctrl.type === 'write' ? 'text-amber-500' : 'text-brand-500'}`} />
+                                            <span className="text-[11px] font-semibold text-surface-800 truncate">{ctrl.label}</span>
+                                        </div>
+                                        {ctrl.description && (
+                                            <p className="text-[10px] text-surface-400 truncate ml-4">{ctrl.description}</p>
+                                        )}
+                                        <p className="text-[10px] text-surface-300 font-mono mt-0.5 ml-4 truncate">
+                                            {ctrl.query.slice(0, 36)}{ctrl.query.length > 36 ? '…' : ''}
+                                        </p>
+                                    </button>
+                                    {/* Delete on hover */}
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); deleteControl(ctrl.id); }}
+                                        className="absolute top-2 right-2 p-1 rounded hidden group-hover:flex bg-white border border-surface-200 hover:border-red-300 hover:text-red-500 text-surface-300 transition-colors"
+                                        title="Remove control"
+                                    >
+                                        <X className="h-2.5 w-2.5" />
+                                    </button>
+                                </div>
+                            ))
+                        )}
+
+                        {/* Divider + other table controls */}
+                        {otherControls.length > 0 && (
+                            <div className="pt-1">
+                                <p className="text-[10px] text-surface-300 px-1 mb-1.5 border-t border-surface-100 pt-2">
+                                    Other tables
+                                </p>
+                                {otherControls.map((ctrl) => (
+                                    <button
+                                        key={ctrl.id}
+                                        onClick={() => loadControlToEditor(ctrl)}
+                                        className="w-full text-left p-2 rounded text-[11px] text-surface-500 hover:bg-surface-100 transition-colors flex items-center gap-1.5"
+                                    >
+                                        <span className="font-mono text-[10px] text-surface-300 flex-shrink-0">
+                                            {ctrl.table}
+                                        </span>
+                                        <span className="truncate">{ctrl.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Status Bar ───────────────────────────────────────── */}
             <div className="flex items-center gap-4 px-3 py-1.5 border-t border-surface-200 text-[11px] text-surface-500 flex-shrink-0 bg-surface-50">
                 <span><span className="text-red-400">*</span> Required</span>
-                <span>Click cell to edit</span>
-                <span><Copy className="inline h-3 w-3" /> Duplicate copies row values</span>
-                <span>Tab to move between cells</span>
+                <span>Click cell to edit · Tab to move · Enter to confirm</span>
+                <span>Ctrl+Enter runs query</span>
+                <span><Copy className="inline h-3 w-3" /> duplicates row</span>
                 {isDirty && <span className="text-amber-600 font-medium ml-auto">● Unsaved changes</span>}
             </div>
+
+            {/* ── Paste Rows Modal ──────────────────────────────────── */}
+            {showPasteModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[85vh]">
+
+                        {/* Modal header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-surface-200">
+                            <div>
+                                <h2 className="text-sm font-semibold text-surface-900">Paste Rows from Excel / Google Sheets</h2>
+                                <p className="text-[11px] text-surface-400 mt-0.5">
+                                    Copy rows including the header row → paste below. Columns matched by name automatically.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => { setShowPasteModal(false); setPasteText(''); setPastePreview(null); }}
+                                className="p-1.5 rounded-lg hover:bg-surface-100 text-surface-400"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        {/* Expected columns hint */}
+                        <div className="px-5 py-2 bg-surface-50 border-b border-surface-100">
+                            <p className="text-[10px] text-surface-400 font-semibold uppercase tracking-wide mb-1">
+                                Expected columns for <span className="text-brand-600">{TABLE_LABELS[selectedTable]}</span>
+                            </p>
+                            <p className="text-[11px] text-surface-500 font-mono leading-relaxed">
+                                {colDefs.map(c => c.name).join(' · ')}
+                            </p>
+                        </div>
+
+                        {/* Textarea */}
+                        <div className="px-5 py-4 flex-1 min-h-0 flex flex-col gap-3">
+                            <textarea
+                                autoFocus
+                                className="flex-1 min-h-[160px] w-full text-xs font-mono bg-surface-50 border border-surface-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-brand-400 placeholder:text-surface-300"
+                                placeholder={`Paste tab-separated data here.\nFirst row must be headers.\n\nExample:\nitem_name\tbrand_id\tretail_price_unit\nNotebook 172pg\t3\t45`}
+                                value={pasteText}
+                                onChange={(e) => handlePasteTextChange(e.target.value)}
+                                spellCheck={false}
+                            />
+
+                            {/* Preview */}
+                            {pastePreview && (
+                                <div className="rounded-lg border border-surface-200 overflow-hidden">
+                                    <div className="bg-surface-100 px-3 py-1.5 flex items-center justify-between">
+                                        <span className="text-[11px] font-semibold text-surface-600">
+                                            Preview — {pastePreview.rows.length} row{pastePreview.rows.length !== 1 ? 's' : ''} detected
+                                        </span>
+                                        <span className="text-[10px] text-surface-400">
+                                            {pastePreview.headers.length} columns
+                                        </span>
+                                    </div>
+                                    <div className="overflow-x-auto max-h-[140px] overflow-y-auto">
+                                        <table className="w-full text-[11px]">
+                                            <thead>
+                                                <tr className="bg-surface-50">
+                                                    {pastePreview.headers.map((h, i) => {
+                                                        const matched = colDefs.some(c => c.name === h || c.name.includes(h) || h.includes(c.name));
+                                                        return (
+                                                            <th key={i} className={`px-2 py-1 text-left font-semibold border-r border-surface-100 last:border-0 ${matched ? 'text-emerald-700' : 'text-red-400'}`}>
+                                                                {h}
+                                                                {matched ? ' ✓' : ' ?'}
+                                                            </th>
+                                                        );
+                                                    })}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {pastePreview.rows.slice(0, 4).map((row, ri) => (
+                                                    <tr key={ri} className="border-t border-surface-100">
+                                                        {row.map((cell, ci) => (
+                                                            <td key={ci} className="px-2 py-1 text-surface-600 border-r border-surface-100 last:border-0 truncate max-w-[120px]">
+                                                                {cell || <span className="text-surface-300">—</span>}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                                {pastePreview.rows.length > 4 && (
+                                                    <tr className="border-t border-surface-100">
+                                                        <td colSpan={pastePreview.headers.length} className="px-2 py-1 text-surface-400 text-center">
+                                                            + {pastePreview.rows.length - 4} more rows…
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex items-center justify-between px-5 py-3 border-t border-surface-200 bg-surface-50 rounded-b-2xl">
+                            <p className="text-[11px] text-surface-400">
+                                Green headers = matched · Red = unrecognised (will be skipped)
+                            </p>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => { setShowPasteModal(false); setPasteText(''); setPastePreview(null); }}
+                                    className="text-xs px-4 py-1.5 rounded-lg border border-surface-200 text-surface-600 hover:bg-surface-100 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={executePaste}
+                                    disabled={!pastePreview || pastePreview.rows.length === 0 || isPasting}
+                                    className="text-xs px-5 py-1.5 rounded-lg bg-violet-600 text-white font-semibold hover:bg-violet-700 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                                >
+                                    {isPasting
+                                        ? <><div className="h-3 w-3 border border-white border-t-transparent rounded-full animate-spin" /> Inserting…</>
+                                        : <><Play className="h-3 w-3" /> Insert {pastePreview?.rows.length ?? 0} Rows</>
+                                    }
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

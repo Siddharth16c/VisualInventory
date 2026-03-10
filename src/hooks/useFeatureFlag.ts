@@ -1,21 +1,26 @@
 import { useAppStore } from '@/store/store';
+import { isFeatureEnabled, type FeatureFlag } from '@/config/featuresConfig';
 
-/**
- * Check whether a feature is enabled for the current user's firm.
- *
- * Feature flags are stored in `firms.enabled_features` as a JSON object.
- * The master_admin always has all features enabled.
- *
- * Usage:
- *   const canUseBilling = useFeatureFlag('billing');
- */
-export function useFeatureFlag(flag: string): boolean {
+export function useFeatureFlag(flag: FeatureFlag): boolean {
     const userRole = useAppStore(s => s.userRole);
-    // Master admin bypasses all flags
-    if (userRole === 'master_admin') return true;
+    const enabledFeatures = useAppStore(s => s.enabledFeatures);
+    
+    return isFeatureEnabled(flag, enabledFeatures, userRole);
+}
 
-    // For now, we keep a snapshot of enabled_features in the business config
-    // loaded by App.tsx into activeBusiness config. We read from the store.
-    // TODO: store `enabled_features` in the AuthSlice after login — for now default true
-    return true; // Will be wired to firms.enabled_features after first login
+export function useAllFeatureFlags(): Record<FeatureFlag, boolean> {
+    const userRole = useAppStore(s => s.userRole);
+    const enabledFeatures = useAppStore(s => s.enabledFeatures);
+    
+    const { FEATURE_KEYS, FEATURE_DEFINITIONS } = require('@/config/featuresConfig');
+    
+    const result: Record<string, boolean> = {};
+    for (const key of FEATURE_KEYS) {
+        result[key] = isFeatureEnabled(key, enabledFeatures, userRole);
+    }
+    return result;
+}
+
+export function useIsMasterAdmin(): boolean {
+    return useAppStore(s => s.userRole) === 'master_admin';
 }

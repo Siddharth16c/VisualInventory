@@ -1,43 +1,61 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAppStore } from '@/store/store';
-import {
-    Receipt,
-    Package,
-    MapPin,
-    Megaphone,
-    Truck,
-    Warehouse as WHIcon,
-    BarChart,
-    TrendingUp,
-    Columns,
-    Settings,
-    X,
-    Boxes,
-    Image,
-} from 'lucide-react';
+import { useIsMasterAdmin } from '@/hooks/useFeatureFlag';
+import { FEATURE_DEFINITIONS, isFeatureEnabled } from '@/config/featuresConfig';
+import { X, Boxes } from 'lucide-react';
 
-const navItems = [
-    { to: '/billing', icon: Receipt, label: 'Orders & Billing' },
-    { to: '/inventory', icon: Package, label: 'Inventory' },
-    { to: '/fieldops', icon: MapPin, label: 'Field Ops' },
-    { to: '/marketing', icon: Megaphone, label: 'Marketing' },
-    { to: '/media', icon: Image, label: 'Media' },
-    { to: '/suppliers', icon: Truck, label: 'Suppliers' },
-    { to: '/warehouse', icon: WHIcon, label: 'Warehouse' },
-    { to: '/reports', icon: BarChart, label: 'Reports' },
-    { to: '/accounting', icon: TrendingUp, label: 'Accounting' },
-    { to: '/splitviewer', icon: Columns, label: 'Split Viewer' },
-    { to: '/settings', icon: Settings, label: 'Settings' },
-];
+function NavItem({ 
+    to, 
+    icon: Icon, 
+    label, 
+    isExpanded 
+}: { 
+    to: string; 
+    icon: React.ComponentType<{ className?: string }>; 
+    label: string; 
+    isExpanded: boolean;
+}) {
+    return (
+        <NavLink
+            to={to}
+            onClick={() => useAppStore.getState().setSidebarOpen(false)}
+            title={!isExpanded ? label : undefined}
+            className={({ isActive }) =>
+                `flex items-center gap-2.5 rounded-lg text-sm font-medium transition-all duration-200
+                ${isExpanded ? 'px-3 py-2' : 'px-2 py-2 justify-center'}
+                ${isActive
+                    ? 'bg-surface-900 text-white shadow-sm'
+                    : 'text-surface-600 hover:text-surface-900 hover:bg-surface-100'
+                }`
+            }
+        >
+            <Icon className="h-[17px] w-[17px] flex-shrink-0" />
+            {isExpanded && <span className="truncate animate-fade-in">{label}</span>}
+        </NavLink>
+    );
+}
 
 export default function Sidebar() {
     const sidebarOpen = useAppStore((s) => s.sidebarOpen);
     const [hovered, setHovered] = useState(false);
+    const isMasterAdmin = useIsMasterAdmin();
+    const enabledFeatures = useAppStore((s) => s.enabledFeatures);
+    const userRole = useAppStore((s) => s.userRole);
 
-    // Desktop: collapsed (icon strip) by default, expand on hover
-    // Mobile: full sidebar toggled by hamburger
     const isExpanded = sidebarOpen || hovered;
+
+    const visibleFeatures = useMemo(() => {
+        return FEATURE_DEFINITIONS.filter(feature => {
+            if (feature.adminOnly && !isMasterAdmin) return false;
+            
+            if (!isMasterAdmin && !feature.alwaysEnabled) {
+                return isFeatureEnabled(feature.key, enabledFeatures, userRole);
+            }
+            
+            return true;
+        });
+    }, [isMasterAdmin, enabledFeatures, userRole]);
 
     return (
         <aside
@@ -74,24 +92,14 @@ export default function Sidebar() {
 
             {/* Navigation */}
             <nav className="flex-1 overflow-y-auto py-3 px-1.5 space-y-0.5">
-                {navItems.map((item) => (
-                    <NavLink
-                        key={item.to}
-                        to={item.to}
-                        onClick={() => useAppStore.getState().setSidebarOpen(false)}
-                        title={!isExpanded ? item.label : undefined}
-                        className={({ isActive }) =>
-                            `flex items-center gap-2.5 rounded-lg text-sm font-medium transition-all duration-200
-                            ${isExpanded ? 'px-3 py-2' : 'px-2 py-2 justify-center'}
-                            ${isActive
-                                ? 'bg-surface-900 text-white shadow-sm'
-                                : 'text-surface-600 hover:text-surface-900 hover:bg-surface-100'
-                            }`
-                        }
-                    >
-                        <item.icon className="h-[17px] w-[17px] flex-shrink-0" />
-                        {isExpanded && <span className="truncate animate-fade-in">{item.label}</span>}
-                    </NavLink>
+                {visibleFeatures.map((feature) => (
+                    <NavItem
+                        key={feature.key}
+                        to={feature.route}
+                        icon={feature.icon}
+                        label={feature.label}
+                        isExpanded={isExpanded}
+                    />
                 ))}
             </nav>
 

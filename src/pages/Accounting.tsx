@@ -1,12 +1,12 @@
-import { useState, useCallback } from 'react';
-import { useSupabaseLiveQuery } from '@/hooks/useLiveQuery';
+import { useState } from 'react';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 import { DAL } from '@/db/dal';
 import { useAppStore } from '@/store/store';
 import { Plus, Trash2, X, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 
 export default function Accounting() {
-    const orders = useSupabaseLiveQuery(useCallback(() => DAL.orders.getAll(), []), [], ['orders']);
-    const costs = useSupabaseLiveQuery(useCallback(() => DAL.costs.getAll(), []), [], ['costs']);
+    const orders = useSupabaseQuery(['orders'], () => DAL.orders.getAll(), []);
+    const costs = useSupabaseQuery(['costs'], () => DAL.costs.getAll(), []);
     const addToast = useAppStore((s) => s.addToast);
     const [showModal, setShowModal] = useState(false);
     const [form, setForm] = useState<any>({

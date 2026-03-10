@@ -11,13 +11,19 @@ export default function AutoBackup() {
 
     useEffect(() => {
         const checkBackup = () => {
+            // Check if user has disabled the prompt entirely
+            if (localStorage.getItem('visualOS_backupDisabled') === 'true') return;
+
+            // Check snooze: don't show if within snooze window
+            const snoozeUntil = localStorage.getItem('visualOS_backupSnoozeUntil');
+            if (snoozeUntil && Date.now() < Number(snoozeUntil)) return;
+
             const lastBackupStr = localStorage.getItem('visualOS_lastBackupDate');
             const today = new Date().toISOString().split('T')[0];
 
-            // If we've never backed up, or the last backup wasn't today
+            // Show only if never backed up today
             if (!lastBackupStr || lastBackupStr !== today) {
-                // Show prompt after a short delay so it doesn't interrupt immediate use
-                setTimeout(() => setShowPrompt(true), 15000);
+                setTimeout(() => setShowPrompt(true), 30000);
             }
         };
 
@@ -76,8 +82,14 @@ export default function AutoBackup() {
     };
 
     const handleDismiss = () => {
-        // Still prompt them next time they open the app today (unless they specifically mute it, but we'll be persistent for safety)
-        // We'll just dismiss for this session.
+        // Snooze for 3 days
+        const snoozeMs = 3 * 24 * 60 * 60 * 1000;
+        localStorage.setItem('visualOS_backupSnoozeUntil', String(Date.now() + snoozeMs));
+        setShowPrompt(false);
+    };
+
+    const handleDisable = () => {
+        localStorage.setItem('visualOS_backupDisabled', 'true');
         setShowPrompt(false);
     };
 
@@ -106,7 +118,7 @@ export default function AutoBackup() {
                         className="btn-ghost flex-1 text-xs px-3 py-2"
                         disabled={isExporting}
                     >
-                        Remind Later
+                        Snooze 3 Days
                     </button>
                     <button
                         onClick={handleBackup}
@@ -117,6 +129,12 @@ export default function AutoBackup() {
                         {isExporting ? 'Exporting...' : 'Download Backup'}
                     </button>
                 </div>
+                <button
+                    onClick={handleDisable}
+                    className="w-full text-center text-[10px] text-surface-500 hover:text-surface-400 mt-1 transition-colors"
+                >
+                    Don't show again
+                </button>
             </div>
         </div>
     );

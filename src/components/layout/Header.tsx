@@ -43,7 +43,7 @@ export default function Header() {
                 <Menu className="h-5 w-5" />
             </button>
 
-            <h2 className="text-lg font-semibold text-surface-900">{title}</h2>
+            {/* <h2 className="text-lg font-semibold text-surface-900">{title}</h2> */}
 
             <div className="ml-auto flex items-center gap-3">
                 {/* Firm name badge */}
