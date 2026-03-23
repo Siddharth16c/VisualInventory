@@ -187,13 +187,13 @@ export default function Warehouse() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="animate-fade-in flex flex-col h-full gap-4">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-700 pb-4">
-        <div className="flex items-center gap-4">
+    <div className="animate-fade-in flex flex-col h-full gap-2 sm:gap-4">
+      {/* Header - Stack on mobile */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-700 pb-3 sm:pb-4 gap-3">
+        <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
           <div className="flex items-center gap-2">
-            <WarehouseIcon className="h-6 w-6 text-indigo-400" />
-            <h1 className="text-xl font-bold text-surface-700">Storage Visualisation</h1>
+            <WarehouseIcon className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400" />
+            <h1 className="text-base sm:text-xl font-bold text-surface-700">Storage</h1>
           </div>
 
           {/* Place Selector */}
@@ -205,7 +205,7 @@ export default function Warehouse() {
                 setSelectedFloor(0);
                 setSelectedZone(null);
               }}
-              className="input-field text-sm"
+              className="input-field text-xs sm:text-sm py-1 sm:py-1.5"
             >
               {places.map(place => (
                 <option key={place.id} value={place.id}>
@@ -222,7 +222,7 @@ export default function Warehouse() {
                 <button
                   key={i}
                   onClick={() => setSelectedFloor(i)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${selectedFloor === i
+                  className={`px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-lg transition-all ${selectedFloor === i
                     ? 'bg-indigo-600 text-white'
                     : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                     }`}
@@ -234,18 +234,20 @@ export default function Warehouse() {
           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Stats */}
-          <div className="flex items-center gap-4 text-sm text-slate-400">
-            <span className="flex items-center gap-1.5 text-slate-900">
-              <MapIcon className="h-4 w-4" />
-              {totalZones} zones
+        <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+          {/* Stats - Compact on mobile */}
+          <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-sm text-slate-400">
+            <span className="flex items-center gap-1 text-slate-900">
+              <MapIcon className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">{totalZones} zones</span>
+              <span className="sm:hidden">{totalZones}</span>
             </span>
-            <span className="flex items-center gap-1.5 text-slate-900">
-              <Package className="h-4 w-4" />
-              {totalSlots} slots
+            <span className="flex items-center gap-1 text-slate-900">
+              <Package className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">{totalSlots} slots</span>
+              <span className="sm:hidden">{totalSlots}</span>
             </span>
-            <span className="flex items-center gap-1.5 text-slate-900">
+            <span className="flex items-center gap-1 text-slate-900 hidden sm:flex">
               <WarehouseIcon className="h-4 w-4" />
               {totalItems} items
             </span>
@@ -254,41 +256,43 @@ export default function Warehouse() {
           {/* Refresh Button */}
           <button
             onClick={handleRefresh}
-            className="text-slate-900 btn-ghost text-sm flex items-center gap-2"
+            className="text-slate-900 btn-ghost text-[10px] sm:text-sm flex items-center gap-1 sm:gap-2 py-1 sm:py-1.5"
             title="Refresh all data"
           >
-            <RefreshCw className="h-4 w-4" />
-            Refresh
+            <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-700 pb-4">
+      <div className="flex items-center gap-1 sm:gap-2 border-b border-slate-700 pb-3 sm:pb-4">
         <button
           onClick={() => setActiveTab('view')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'view'
+          className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${activeTab === 'view'
             ? 'bg-indigo-600 text-white'
             : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
             }`}
         >
-          <MapIcon className="h-4 w-4" />
-          Map View
+          <MapIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="hidden sm:inline">Map View</span>
+          <span className="sm:hidden">View</span>
         </button>
         <button
           onClick={() => setActiveTab('edit')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'edit'
+          className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${activeTab === 'edit'
             ? 'bg-indigo-600 text-white'
             : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
             }`}
         >
-          <Edit3 className="h-4 w-4" />
-          Edit Map
+          <Edit3 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="hidden sm:inline">Edit Map</span>
+          <span className="sm:hidden">Edit</span>
         </button>
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-slate-700 bg-white/95">
+      <div className="flex-1 min-h-0 overflow-hidden rounded-lg sm:rounded-xl border border-slate-700 bg-white/95">
         {activeTab === 'edit' ? (
           /* Edit Map: ALWAYS show SpatialMapper — it handles empty places with inline creation */
           <SpatialMapper
@@ -298,15 +302,15 @@ export default function Warehouse() {
             onZoneDelete={handleZoneDelete}
           />
         ) : places.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
-            <AlertCircle className="h-12 w-12 text-slate-600" />
-            <div className="text-center">
-              <p className="text-surface-400 text-sm mb-2">No storage places configured</p>
-              <p className="text-surface-500 text-xs">Create a storage place in Edit Map mode to get started</p>
+          <div className="flex flex-col items-center justify-center h-full gap-3 sm:gap-4">
+            <AlertCircle className="h-10 w-10 sm:h-12 sm:w-12 text-slate-600" />
+            <div className="text-center px-4">
+              <p className="text-surface-400 text-xs sm:text-sm mb-2">No storage places configured</p>
+              <p className="text-surface-500 text-[10px] sm:text-xs">Create a storage place in Edit Map mode to get started</p>
             </div>
             <button
               onClick={() => setActiveTab('edit')}
-              className="btn-primary text-sm"
+              className="btn-primary text-xs sm:text-sm"
             >
               Go to Edit Map
             </button>

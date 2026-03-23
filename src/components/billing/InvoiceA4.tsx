@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import type { Order } from '@/db/dexie';
+import type { Order } from '@/db/types';
 import type { CartItem } from '@/store/store';
 
 interface InvoiceA4Props {

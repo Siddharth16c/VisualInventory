@@ -1,22 +1,17 @@
-import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
+import { useState, useRef, useMemo, useCallback, useEffect, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Html, Line } from '@react-three/drei';
+import { OrthographicCamera, Html, Edges } from '@react-three/drei';
 import * as THREE from 'three';
+import { Model as WarehouseModel } from './models/Warehousef1-front-mesh';
 import type { StoragePlace, StorageZone, Item, ItemLocation } from '@/db/types';
-import {
-  Building2,
-  Layers,
-  Package,
-  Search,
-  X,
-  MapPin,
-  Boxes,
-  Tag
-} from 'lucide-react';
 import { DAL, emitDbChange } from '@/db/dal';
+import {
+  Building2, Package, Search, X, MapPin, Boxes, Tag, 
+  Axis3D, Crosshair, Layers, Box as BoxIcon, MoveRight, Trash2
+} from 'lucide-react';
+import { supabase } from '@/db/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
 interface SpatialViewer3DProps {
   places: StoragePlace[];
   zones: StorageZone[];
@@ -26,742 +21,439 @@ interface SpatialViewer3DProps {
   externalHighlightedZoneIds?: Set<number>;
 }
 
-interface ZoneStockInfo {
-  item: Item;
-  location: ItemLocation;
-  packagingType: string | null;
-  parcelCount: number;
-}
+type ViewPlane = 'top' | 'front' | 'right';
 
-interface StockByZone {
-  [zoneId: number]: ZoneStockInfo[];
-}
-
-// ─── Color Palette ────────────────────────────────────────────────────────────
-
-const ZONE_COLORS = [
-  '#6366f1', // indigo
-  '#ec4899', // pink
-  '#f59e0b', // amber
-  '#10b981', // emerald
-  '#06b6d4', // cyan
-  '#f97316', // orange
-  '#8b5cf6', // violet
-  '#ef4444', // red
-  '#14b8a6', // teal
-  '#84cc16', // lime
-];
-
-const getZoneColor = (index: number) => ZONE_COLORS[index % ZONE_COLORS.length];
-
+// ─── Utility: 3D Intersection Math ────────────────────────────────────────────
+// Checks if a 3D point falls inside a Sectional Label's Bounding Box
+const isPointInBox = (x: number, y: number, z: number, box: { min: number[], max: number[] }) => {
+  return x >= box.min[0] && x <= box.max[0] &&
+         y >= box.min[1] && y <= box.max[1] &&
+         z >= box.min[2] && z <= box.max[2];
+};
 
 // ─── 3D Components ────────────────────────────────────────────────────────────
 
-function SlotMarker({
-  position,
-  label,
-  onClick
-}: {
-  position: THREE.Vector3;
-  label: string;
-  onClick: () => void
-}) {
-  return (
-    <group position={position} onClick={(e) => { e.stopPropagation(); onClick(); }}>
-      {/* The Visual Pin */}
-      <mesh position={[0, 0.5, 0]}>
-        <cylinderGeometry args={[0.01, 0.01, 1, 8]} />
-        <meshStandardMaterial color="#6366f1" />
-      </mesh>
-      <mesh position={[0, 1, 0]}>
-        <sphereGeometry args={[0.15, 16, 16]} />
-        <meshStandardMaterial color="#6366f1" emissive="#6366f1" emissiveIntensity={0.5} />
-      </mesh>
+function CameraController({ view, width, height, depth }: { view: ViewPlane, width: number, height: number, depth: number }) {
+  const { camera } = useThree();
+  useEffect(() => {
+    const cx = width / 2;
+    const cy = height / 2;
+    const cz = depth / 2;
+    const orthoCam = camera as THREE.OrthographicCamera;
+    orthoCam.zoom = typeof window !== 'undefined' ? (window.innerWidth < 1000 ? 15 : 25) : 20;
 
-      {/* Floating Label */}
-      <Html distanceFactor={10} position={[0, 1.3, 0]} center>
-        <div className="bg-slate-900/90 text-white text-[10px] px-2 py-1 rounded-full border border-indigo-500 whitespace-nowrap shadow-xl">
-          {label}
-        </div>
-      </Html>
-    </group>
-  );
-}
-/**
- * FloorPlane - A single flat floor plane (no stacking)
- */
-function FloorPlane({
-  isSelected,
-  imageUrl,
-  width = 20,
-  height = 20,
-}: {
-  isSelected: boolean;
-  imageUrl: string | null;
-  width?: number;
-  height?: number;
-}) {
-  const texture = useMemo(() => {
-    if (!imageUrl) return null;
-    const loader = new THREE.TextureLoader();
-    const tex = loader.load(imageUrl);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  }, [imageUrl]);
-
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]}>
-      <planeGeometry args={[width, height]} />
-      <meshStandardMaterial
-        map={texture}
-        color={texture ? 0xffffff : 0x475569}
-        transparent
-        opacity={texture ? 0.95 : 0.85}
-      />
-    </mesh>
-  );
-}
-
-function CameraController({ targetPoint }: { targetPoint: THREE.Vector3 | null }) {
-  const { camera, controls } = useThree();
-
-  useFrame((state) => {
-    if (targetPoint && controls) {
-      // Smoothly move the camera to a "birds-eye" view of the point
-      const idealOffset = new THREE.Vector3(targetPoint.x + 10, targetPoint.y + 15, targetPoint.z + 10);
-      camera.position.lerp(idealOffset, 0.05);
-
-      // Smoothly move the OrbitControls target to the center of the zone
-      (controls as any).target.lerp(targetPoint, 0.05);
-      (controls as any).update();
+    if (view === 'top') {
+      orthoCam.position.set(cx, height + 10, cz);
+      orthoCam.up.set(0, 0, -1);
+      orthoCam.lookAt(cx, 0, cz);
+    } else if (view === 'front') {
+      orthoCam.position.set(cx, cy, depth + 10);
+      orthoCam.up.set(0, 1, 0);
+      orthoCam.lookAt(cx, cy, 0);
+    } else if (view === 'right') {
+      orthoCam.position.set(width + 10, cy, cz);
+      orthoCam.up.set(0, 1, 0);
+      orthoCam.lookAt(0, cy, cz);
     }
-  });
-
+    orthoCam.updateProjectionMatrix();
+  }, [view, width, height, depth, camera]);
   return null;
 }
 
-/**
- * ZonePolygon - Renders a colored polygon zone
- */
-function ZonePolygon({
-  zone,
-  floorY,
-  isHighlighted,
-  isSelected,
-  stockCount,
-  onClick,
-  onPointerOver,
-  onPointerOut
-}: {
-  zone: StorageZone;
-  floorY: number;
-  isHighlighted: boolean;
-  isSelected: boolean;
-  stockCount: number;
-  onClick: () => void;
-  onPointerOver: () => void;
-  onPointerOut: () => void;
-}) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const groupRef = useRef<THREE.Group>(null);
-
-  const coords = zone.polygon_coords || [];
-
-  // Create shape from polygon coordinates
-  const { shape, geometry } = useMemo(() => {
-    if (coords.length < 3) return { shape: null, geometry: null };
-
-    const shape = new THREE.Shape();
-    shape.moveTo(coords[0][0], coords[0][1]);
-    for (let i = 1; i < coords.length; i++) {
-      shape.lineTo(coords[i][0], coords[i][1]);
-    }
-    shape.closePath();
-
-    const geometry = new THREE.ShapeGeometry(shape);
-    return { shape, geometry };
-  }, [coords]);
-
-  // Create outline points for Line component
-  const linePoints = useMemo(() => {
-    if (coords.length < 3) return [];
-    const points = coords.map(([x, y]) => [x, 0.02, y] as [number, number, number]);
-    points.push([coords[0][0], 0.02, coords[0][1]]);
-    return points;
-  }, [coords]);
-
-  const baseColor = zone.zone_color || getZoneColor(zone.id);
-  const fillOpacity = isSelected ? 0.7 : isHighlighted ? 0.6 : 0.4;
-  const zOffset = isSelected ? 0.05 : 0.02;
-  const pulseScale = isHighlighted ? 1.02 : 1;
-
-  // Pulse animation for highlighted zones
-  useFrame((state) => {
-    if (groupRef.current && isHighlighted) {
-      const scale = 1 + Math.sin(state.clock.elapsedTime * 3) * 0.01;
-      groupRef.current.scale.setScalar(scale);
-    }
-  });
-
-  if (!geometry || linePoints.length === 0) return null;
+/** Sectional Label (Volumetric Forcefield) */
+function SectionBox({ zone, isSelected, isHighlighted, onClick }: any) {
+  if (!zone.bounding_box) return null;
+  const { min, max } = zone.bounding_box;
+  const w = max[0] - min[0], h = max[1] - min[1], d = max[2] - min[2];
+  const color = zone.zone_color || '#6366f1';
+  
+  // Highlight intensity if searched
+  const opacity = isSelected ? 0.3 : isHighlighted ? 0.4 : 0.05;
+  const emissive = isHighlighted ? color : '#000000';
 
   return (
-    <group
-      ref={groupRef}
-      position={[0, floorY + zOffset, 0]}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      onPointerOver={(e) => { e.stopPropagation(); onPointerOver(); }}
-      onPointerOut={(e) => { e.stopPropagation(); onPointerOut(); }}
-    >
-      <mesh
-        ref={meshRef}
-        geometry={geometry}
-        rotation={[-Math.PI / 2, 0, 0]}
-        scale={[pulseScale, pulseScale, 1]}
-      >
-        <meshStandardMaterial
-          color={baseColor}
-          transparent
-          opacity={fillOpacity}
-          side={THREE.DoubleSide}
-          emissive={isHighlighted ? baseColor : '#000000'}
-          emissiveIntensity={isHighlighted ? 0.3 : 0}
-        />
+    <group position={[min[0] + w/2, min[1] + h/2, min[2] + d/2]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+      <mesh>
+        <boxGeometry args={[w, h, d]} />
+        <meshStandardMaterial color={color} transparent opacity={opacity} depthWrite={false} side={THREE.DoubleSide} emissive={emissive} emissiveIntensity={isHighlighted ? 0.5 : 0}/>
+        <Edges scale={1} threshold={15} color={isSelected || isHighlighted ? '#ffffff' : color} />
       </mesh>
-
-      <Line
-        points={linePoints}
-        color={isSelected ? '#fbbf24' : isHighlighted ? '#ffffff' : baseColor}
-        lineWidth={isSelected ? 3 : isHighlighted ? 2.5 : 2}
-      />
-
-      {/* Zone label with stock count */}
-      <Html position={[0, 0.3, 0]} center>
-        <div className={`px-2 py-1 rounded-lg text-xs font-medium shadow-lg transition-all ${isSelected
-          ? 'bg-amber-500 text-white'
-          : isHighlighted
-            ? 'bg-white text-slate-900'
-            : 'bg-slate-800/90 text-slate-200'
-          }`}>
-          <div className="flex items-center gap-1">
-            <span>{zone.zone_name}</span>
-            {stockCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 bg-white/20 rounded-full text-[10px]">
-                {stockCount}
-              </span>
-            )}
+      {isSelected && (
+        <Html position={[0, h/2 + 0.2, 0]} center>
+          <div className="bg-slate-900/90 text-white text-xs px-2 py-1 rounded shadow-xl border border-indigo-500 whitespace-nowrap backdrop-blur-sm">
+            {zone.zone_name}
           </div>
-        </div>
-      </Html>
+        </Html>
+      )}
     </group>
   );
 }
 
-/**
- * Scene - Main 3D scene component (single flat floor view)
- */
-function Scene({
-  selectedPlace,
-  selectedFloor,
-  zones,
-  highlightedZoneIds,
-  selectedZoneId,
-  stockByZone,
-  onZoneClick,
-  onZoneHover
-}: {
-  selectedPlace: StoragePlace | null;
-  selectedFloor: number;
-  zones: StorageZone[];
-  highlightedZoneIds: Set<number>;
-  selectedZoneId: number | null;
-  stockByZone: StockByZone;
-  onZoneClick: (zone: StorageZone) => void;
-  onZoneHover: (zoneId: number | null) => void;
-}) {
-  // Only show zones for the currently selected floor
-  const floorZones = zones.filter(z => z.floor_num === selectedFloor);
+/** Physical Stock Box (Rendered Item) */
+function PhysicalStock({ location, item, isSelected, onClick }: any) {
+  if (location.pos_x == null) return null; // Unplaced stock
+
+  const w = location.dim_w || 0.6;
+  const d = location.dim_d || 0.6;
+  const baseH = location.dim_h || 0.5;
+  const totalH = baseH * location.parcel_count; // Scale height by quantity
+
+  const color = isSelected ? '#fbbf24' : '#94a3b8';
 
   return (
-    <>
-      <ambientLight intensity={0.8} />
-      <directionalLight position={[10, 10, 5]} intensity={1.2} />
-      <pointLight position={[-5, 5, -5]} intensity={0.4} color="#818cf8" />
-
-      {/* Grid — lighter colors */}
-      <gridHelper
-        args={[30, 30, 0x475569, 0x334155]}
-        position={[0, -0.1, 0]}
-      />
-
-      {/* Single flat floor plane */}
-      <FloorPlane
-        isSelected={true}
-        imageUrl={selectedPlace?.top_view_image_url || null}
-        width={20}
-        height={20}
-      />
-
-      {/* Render zones for selected floor only */}
-      {floorZones.map(zone => {
-        const stockCount = stockByZone[zone.id]?.length || 0;
-        return (
-          <ZonePolygon
-            key={zone.id}
-            zone={zone}
-            floorY={0}
-            isHighlighted={highlightedZoneIds.has(zone.id)}
-            isSelected={selectedZoneId === zone.id}
-            stockCount={stockCount}
-            onClick={() => onZoneClick(zone)}
-            onPointerOver={() => onZoneHover(zone.id)}
-            onPointerOut={() => onZoneHover(null)}
-          />
-        );
-      })}
-
-      <OrbitControls
-        minPolarAngle={0}
-        maxPolarAngle={Math.PI / 2.1}
-        enablePan
-        enableZoom
-        enableRotate
-      />
-    </>
+    <group position={[location.pos_x, location.pos_y, location.pos_z]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+      <mesh>
+        <boxGeometry args={[w, totalH, d]} />
+        <meshStandardMaterial color={color} roughness={0.7} />
+        <Edges scale={1} color="#334155" />
+      </mesh>
+      {isSelected && (
+        <Html position={[0, totalH/2 + 0.3, 0]} center>
+          <div className="bg-amber-500 text-slate-900 font-bold text-[10px] px-2 py-0.5 rounded-full shadow-lg whitespace-nowrap">
+            {item.item_name} (x{location.parcel_count})
+          </div>
+        </Html>
+      )}
+    </group>
   );
 }
 
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function SpatialViewer3D({
-  places,
-  zones,
-  items,
-  itemLocations,
-  onZoneClick,
-  externalHighlightedZoneIds
-}: SpatialViewer3DProps) {
-  // State
+export default function SpatialViewer3D({ places, zones, items, itemLocations, externalHighlightedZoneIds }: SpatialViewer3DProps) {
+  // Navigation State
   const [selectedPlaceId, setSelectedPlaceId] = useState<number | null>(places[0]?.id || null);
-  const [selectedFloor, setSelectedFloor] = useState<number>(0);
-  const [selectedZoneId, setSelectedZoneId] = useState<number | null>(null);
-  const [hoveredZoneId, setHoveredZoneId] = useState<number | null>(null);
+  const [activeView, setActiveView] = useState<ViewPlane>('top');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Selection State
+  const [selectedZoneId, setSelectedZoneId] = useState<number | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
 
-  const [isAddingMarker, setIsAddingMarker] = useState(false);
-  const [pendingMarker, setPendingMarker] = useState<{
-    x: number;
-    z: number;
-    zone_id: number | null
-  } | null>(null);
+  // Placement Mode State
+  const [placementMode, setPlacementMode] = useState<{ itemId: number, qty: number } | null>(null);
+  const [ghostPos, setGhostPos] = useState<{x: number, y: number, z: number, normalY: number} | null>(null);
 
-  const [newSlotName, setNewSlotName] = useState('');
+  useEffect(() => { if (places.length > 0 && !selectedPlaceId) setSelectedPlaceId(places[0].id); }, [places, selectedPlaceId]);
 
-  // Rehydration fix: auto-select first place if places prop updates
-  useEffect(() => {
-    if (places.length > 0 && !selectedPlaceId) {
-      setSelectedPlaceId(places[0].id);
-    }
-  }, [places, selectedPlaceId]);
+  // Derived Dimensions
+  const selectedPlace = useMemo(() => places.find(p => p.id === selectedPlaceId), [places, selectedPlaceId]);
+  const pWidth = selectedPlace?.width_meters || 20;
+  const pDepth = selectedPlace?.depth_meters || 20;
+  const pHeight = selectedPlace?.height_meters || 5;
 
-  // Derived state
-  const selectedPlace = useMemo(() =>
-    places.find(p => p.id === selectedPlaceId),
-    [places, selectedPlaceId]
-  );
+  const filteredZones = useMemo(() => zones.filter(z => z.place_id === selectedPlaceId && !z.deleted_at), [zones, selectedPlaceId]);
+  
+  // Map floating items to their respective volumetric zones
+  const itemsInZone = useMemo(() => {
+    if (!selectedZoneId) return [];
+    const zone = filteredZones.find(z => z.id === selectedZoneId);
+    if (!zone?.bounding_box) return [];
 
-  // Inside SpatialViewer3D
-  const handleFloorClick = useCallback((point: { x: number; y: number }) => {
-    if (!isAddingMarker) return;
-
-    // We map the 3D point (x, z) to our pending marker state
-    // Note: Three.js uses Y as up, so floor coordinates are X and Z
-    setPendingMarker({
-      x: point.x,
-      z: point.y, // This is the 'z' coordinate from the 3D plane
-      zone_id: hoveredZoneId // Auto-associates with the zone the mouse is currently over
+    return itemLocations.filter(loc => {
+      if (loc.deleted_at || loc.pos_x == null || loc.parcel_count <= 0) return false;
+      return isPointInBox(loc.pos_x, loc.pos_y!, loc.pos_z!, zone.bounding_box!);
     });
-  }, [isAddingMarker, hoveredZoneId]);
+  }, [selectedZoneId, filteredZones, itemLocations]);
 
-  const filteredZones = useMemo(() =>
-    zones.filter(z =>
-      z.place_id === selectedPlaceId &&
-      !z.deleted_at
-    ),
-    [zones, selectedPlaceId]
-  );
+  const selectedItemLoc = useMemo(() => itemLocations.find(l => l.id === selectedLocationId), [selectedLocationId, itemLocations]);
+  const selectedItemDetails = useMemo(() => items.find(i => i.id === selectedItemLoc?.item_id), [selectedItemLoc, items]);
 
-  const handleSaveSlot = async () => {
-    if (!pendingMarker || !newSlotName.trim()) return;
+  // Search Logic -> Glow Volumetric Boxes
+  const highlightedZoneIds = useMemo(() => {
+    const highlights = new Set<number>(externalHighlightedZoneIds || []);
+    if (!searchQuery.trim()) return highlights;
+    const query = searchQuery.toLowerCase();
+
+    // 1. Search Zone Names directly
+    filteredZones.forEach(z => { if (z.zone_name.toLowerCase().includes(query)) highlights.add(z.id); });
+
+    // 2. Search Items and find which Zone Volume they are inside
+    const matchedItems = items.filter(i => i.item_name.toLowerCase().includes(query) || i.keyword_id?.toLowerCase().includes(query));
+    matchedItems.forEach(item => {
+      itemLocations.forEach(loc => {
+        if (loc.item_id === item.id && loc.pos_x != null) {
+          filteredZones.forEach(z => {
+            if (z.bounding_box && isPointInBox(loc.pos_x!, loc.pos_y!, loc.pos_z!, z.bounding_box)) {
+              highlights.add(z.id);
+            }
+          });
+        }
+      });
+    });
+    return highlights;
+  }, [searchQuery, filteredZones, items, itemLocations, externalHighlightedZoneIds]);
+
+  // ─── 3D Interaction Handlers ──────────────────────────────────────────────
+
+  const handlePointerMove = (e: any) => {
+    if (!placementMode) return;
+    e.stopPropagation();
+    // Snap to 0.5m grid for neatness
+    const snapX = Math.round(e.point.x * 2) / 2;
+    const snapZ = Math.round(e.point.z * 2) / 2;
+    setGhostPos({ x: snapX, y: e.point.y, z: snapZ, normalY: e.face?.normal?.y || 0 });
+  };
+
+  const handleDropStock = async (e: any) => {
+    if (!placementMode || !ghostPos) return;
+    e.stopPropagation();
+
+    const w = 0.6, d = 0.6, baseH = 0.5;
+    const stackH = baseH * placementMode.qty;
+
+    // Raycast Logic: If clicked on top of another box (normalY is positive), stack it.
+    // Otherwise, place it on the floor.
+    let finalY = (ghostPos.normalY > 0.5) ? ghostPos.y + (stackH / 2) : (stackH / 2);
 
     try {
-      // 1. Create the slot in Layer 3
-      const newSlot = await DAL.storage_slots.create({
-        zone_id: pendingMarker.zone_id || 0, // Fallback if not over a zone
-        slot_name: newSlotName.trim(),
-        notes: JSON.stringify({ x: pendingMarker.x, z: pendingMarker.z }) // Store coords in notes or metadata
+      // Use raw Supabase insert to bypass the strict slot_id unique constraint for floating stock
+      await supabase.from('item_locations').insert({
+        firm_id: getFirmId(),
+        item_id: placementMode.itemId,
+        parcel_count: placementMode.qty,
+        pos_x: ghostPos.x,
+        pos_y: finalY,
+        pos_z: ghostPos.z,
+        dim_w: w, dim_d: d, dim_h: baseH,
+        is_primary: true
       });
-
-      emitDbChange('storage_slots');
-      setPendingMarker(null);
-      setNewSlotName('');
-      setIsAddingMarker(false);
-    } catch (err) {
-      alert("Error saving landmark: " + err);
+      
+      emitDbChange('item_locations');
+      setPlacementMode(null);
+      setGhostPos(null);
+    } catch (err: any) {
+      alert("Failed to place stock: " + err.message);
     }
   };
 
-  const selectedZone = useMemo(() =>
-    zones.find(z => z.id === selectedZoneId),
-    [zones, selectedZoneId]
-  );
-
-  // Compute stock by zone using the itemLocations prop (derived from item_location_full view)
-  const stockByZone = useMemo<StockByZone>(() => {
-    const result: StockByZone = {};
-
-    // Initialize empty arrays for all zones to ensure they are hoverable
-    zones.forEach(zone => {
-      result[zone.id] = [];
-    });
-
-    // Populate result with items from the itemLocations prop
-    // Note: itemLocations here should be cast/treated as ItemLocationFull[]
-    itemLocations.forEach((loc: any) => {
-      if (loc.deleted_at || !loc.zone_id) return;
-
-      const item = items.find(i => i.id === loc.item_id);
-      if (!item) return;
-
-      if (result[loc.zone_id]) {
-        result[loc.zone_id].push({
-          item: item,
-          location: loc,
-          packagingType: loc.packaging_type,
-          parcelCount: loc.parcel_count
-        });
-      }
-    });
-
-    return result;
-  }, [itemLocations, items, zones]);
-
-
-  // Get stock for selected zone
-  const selectedZoneStock = useMemo(() => {
-    if (!selectedZoneId) return [];
-    return stockByZone[selectedZoneId] || [];
-  }, [selectedZoneId, stockByZone]);
-
-  // Compute highlighted zones from search
-  const highlightedZoneIds = useMemo(() => {
-    const highlighted = new Set<number>();
-
-    if (!searchQuery.trim()) return highlighted;
-
-    const query = searchQuery.toLowerCase();
-
-    // Search in zones
-    zones.forEach(zone => {
-      if (zone.zone_name.toLowerCase().includes(query) ||
-        zone.zone_slug.toLowerCase().includes(query) ||
-        zone.zone_label?.toLowerCase().includes(query)) {
-        highlighted.add(zone.id);
-      }
-    });
-
-    // Search in items and highlight their zones
-    items.forEach(item => {
-      if (item.item_name.toLowerCase().includes(query) ||
-        item.keyword_id?.toLowerCase().includes(query) ||
-        item.category.toLowerCase().includes(query)) {
-        // Find zones containing this item
-        itemLocations.forEach(loc => {
-          if (loc.item_id === item.id && !loc.deleted_at) {
-            // Map slot to zone (simplified - in production use proper mapping)
-            zones.forEach(zone => {
-              highlighted.add(zone.id);
-            });
-          }
-        });
-      }
-    });
-
-    return highlighted;
-  }, [searchQuery, zones, items, itemLocations]);
-
-  // Inside the component logic
-  const combinedHighlights = useMemo(() => {
-    const highlights = new Set(highlightedZoneIds); // Local search (zone names)
-    externalHighlightedZoneIds?.forEach(id => highlights.add(id)); // External search (items)
-    return highlights;
-  }, [highlightedZoneIds, externalHighlightedZoneIds]);
-
-  // The ZonePolygon component already has logic to pulse when isHighlighted is true.
-  // It uses useFrame to scale the mesh:
-  // useFrame((state) => {
-  //   if (groupRef.current && isHighlighted) {
-  //     const scale = 1 + Math.sin(state.clock.elapsedTime * 3) * 0.01;
-  //     groupRef.current.scale.setScalar(scale);
-  //   }
-  // });
-
-  const cameraTarget = useMemo(() => {
-    const activeId = selectedZoneId || Array.from(combinedHighlights)[0];
-    if (!activeId) return null;
-
-    const zone = zones.find(z => z.id === activeId);
-    if (!zone || !zone.polygon_coords || zone.polygon_coords.length === 0) return null;
-
-    // Calculate the average center of the polygon
-    const sum = zone.polygon_coords.reduce((acc, curr) => [acc[0] + curr[0], acc[1] + curr[1]], [0, 0]);
-    const centerX = sum[0] / zone.polygon_coords.length;
-    const centerZ = sum[1] / zone.polygon_coords.length;
-
-    // Calculate vertical offset based on floor
-    const floorY = (selectedPlace?.floor_count ? selectedPlace.floor_count - 1 - zone.floor_num : 0) * 0.5;
-
-    return new THREE.Vector3(centerX, floorY, centerZ);
-  }, [selectedZoneId, combinedHighlights, zones, selectedPlace]);
-
-  // Handlers
-  const handleZoneClick = useCallback((zone: StorageZone) => {
-    setSelectedZoneId(zone.id === selectedZoneId ? null : zone.id);
-    onZoneClick?.(zone);
-  }, [selectedZoneId, onZoneClick]);
-
-  const handleZoneHover = useCallback((zoneId: number | null) => {
-    setHoveredZoneId(zoneId);
-  }, []);
-
-  const clearSelection = useCallback(() => {
-    setSelectedZoneId(null);
-  }, []);
-
   return (
-    <div className="flex flex-col h-full">
-      {/* Header with store tabs and search */}
-      <div className="flex items-center gap-4 p-4 border-b border-slate-700 bg-slate-900">
-        {/* Store tabs */}
-        <div className="flex items-center gap-2">
-          <Building2 className="h-5 w-5 text-indigo-400" />
-          <div className="flex gap-1">
-            {places.map(place => (
-              <button
-                key={place.id}
-                onClick={() => {
-                  setSelectedPlaceId(place.id);
-                  setSelectedZoneId(null);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${selectedPlaceId === place.id
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
-                  }`}
-              >
-                {place.place_name}
-              </button>
-            ))}
+    <div className="flex h-full gap-4">
+      {/* Left Sidebar (Controls & Placement) */}
+      <div className="w-72 flex-shrink-0 glass rounded-xl p-4 flex flex-col gap-4 overflow-y-auto z-10">
+        
+        {/* Navigation */}
+        <div className="space-y-3 border-b border-slate-700 pb-4">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-indigo-400" />
+            <select className="input-field text-sm flex-1 font-bold" value={selectedPlaceId || ''} onChange={(e) => setSelectedPlaceId(Number(e.target.value))}>
+              {places.map(p => <option key={p.id} value={p.id}>{p.place_name}</option>)}
+            </select>
           </div>
-        </div>
-
-        {/* Search */}
-        <div className="flex-1 max-w-md">
+          
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search zones, items, or keywords..."
-              className="text-slate-200 w-full pl-10 pr-4 py-1.5 bg-slate-700 border border-slate-600 rounded-lg text-sm text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2"
-              >
-                <X className="h-4 w-4 text-slate-400 hover:text-slate-200" />
-              </button>
-            )}
+            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search Items or Sections..." className="text-slate-200 w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-sm" />
           </div>
         </div>
 
-        {/* Floor pills + Stats */}
-        <div className="flex items-center gap-3 text-xs text-slate-400">
-          {/* Floor selector */}
-          {selectedPlace && selectedPlace.floor_count > 1 && (
-            <div className="flex gap-1">
-              {Array.from({ length: selectedPlace.floor_count }, (_, i) => (
-                <button
-                  key={i}
-                  onClick={() => { setSelectedFloor(i); setSelectedZoneId(null); }}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-all ${selectedFloor === i
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                    }`}
-                >
-                  F{i}
-                </button>
-              ))}
+        {/* Drop Placement Tool */}
+        <div className="bg-emerald-900/10 border border-emerald-500/30 rounded-lg p-3">
+          <h3 className="text-xs font-bold text-emerald-400 uppercase flex items-center gap-2 mb-3">
+            <Crosshair className="h-4 w-4" /> Drop Stock Tool
+          </h3>
+          
+          {placementMode ? (
+            <div className="space-y-2 text-sm">
+              <div className="bg-slate-800 p-2 rounded border border-slate-600 text-slate-200 flex justify-between">
+                <span>{items.find(i => i.id === placementMode.itemId)?.item_name}</span>
+                <span className="font-bold text-amber-400">x{placementMode.qty}</span>
+              </div>
+              <div className="text-xs text-emerald-300 animate-pulse text-center pt-2">
+                Move cursor over 3D map to drop.<br/>Click on boxes to stack.
+              </div>
+              <button onClick={() => setPlacementMode(null)} className="btn-ghost w-full py-1.5 mt-2">Cancel Drop</button>
             </div>
-          )}
-          <div className="flex items-center gap-1">
-            <MapPin className="h-4 w-4 text-slate-200" />
-            <span className='text-slate-200'>{filteredZones.filter(z => z.floor_num === selectedFloor).length} Zones</span>
-          </div>
-          {highlightedZoneIds.size > 0 && (
-            <div className="flex items-center gap-1 text-amber-400">
-              <Tag className="h-4 w-4" />
-              <span>{highlightedZoneIds.size} Match</span>
+          ) : (
+            <div className="space-y-2">
+              <select id="dropItem" className="input-field text-sm w-full">
+                <option value="">-- Select Item --</option>
+                {items.map(i => <option key={i.id} value={i.id}>{i.item_name}</option>)}
+              </select>
+              <div className="flex gap-2">
+                <input id="dropQty" type="number" defaultValue={1} min={1} className="input-field text-sm w-20" placeholder="Qty" />
+                <button onClick={() => {
+                  const id = Number((document.getElementById('dropItem') as HTMLSelectElement).value);
+                  const qty = Number((document.getElementById('dropQty') as HTMLInputElement).value);
+                  if (id && qty) setPlacementMode({ itemId: id, qty });
+                }} className="btn-primary flex-1 text-xs">Activate Drop Mode</button>
+              </div>
             </div>
           )}
         </div>
       </div>
-      {/* Naming Popup (fixed overlay) */}
-      {pendingMarker && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 p-6 rounded-xl w-80 shadow-2xl">
-            <h3 className="text-slate-100 font-bold mb-4">Name this Landmark</h3>
-            <input
-              autoFocus
-              value={newSlotName}
-              onChange={(e) => setNewSlotName(e.target.value)}
-              placeholder="e.g., Near Pillar, Stack B"
-              className="input-field w-full mb-4"
+
+      {/* Blueprint 3D Canvas */}
+      <div className="flex-1 relative rounded-xl overflow-hidden shadow-inner border border-cyan-900/30" style={{ background: '#081221' }}>
+        
+        {/* Orthographic View Controls */}
+        <div className="absolute top-4 left-4 z-10 flex bg-slate-900/80 backdrop-blur rounded-lg p-1 border border-slate-700 shadow-xl">
+          {(['top', 'front', 'right'] as ViewPlane[]).map(v => (
+            <button key={v} onClick={() => setActiveView(v)}
+                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded transition-colors ${activeView === v ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+              {v}
+            </button>
+          ))}
+        </div>
+
+        <Canvas>
+          <color attach="background" args={['#0a192f']} />
+          <ambientLight intensity={0.8} />
+          <directionalLight position={[10, 20, 10]} intensity={0.5} />
+          
+          <OrthographicCamera makeDefault near={-1000} far={1000} />
+          <CameraController view={activeView} width={pWidth} height={pHeight} depth={pDepth} />
+
+          {/* 3D Warehouse Model */}
+          <Suspense fallback={null}>
+            <group position={[pWidth/2, 0, pDepth/2]} scale={[1, 1, 1]}>
+              <WarehouseModel />
+            </group>
+          </Suspense>
+
+          {/* Blueprint Grids & Walls */}
+          <gridHelper args={[Math.max(pWidth, pDepth)*2, Math.max(pWidth, pDepth)*2, '#1e3a8a', '#102a52']} position={[pWidth/2, 0, pDepth/2]} />
+
+          {/* Raycast Floor (Catches drops if floor is clicked) */}
+          <mesh 
+            position={[pWidth/2, 0, pDepth/2]} rotation={[-Math.PI/2, 0, 0]} 
+            onPointerMove={handlePointerMove} onPointerUp={handleDropStock}
+          >
+            <planeGeometry args={[1000, 1000]} />
+            <meshBasicMaterial visible={false} />
+          </mesh>
+
+          {/* Sectional Labels (Zones 2.0) */}
+          {filteredZones.map(zone => (
+            <SectionBox 
+              key={zone.id} zone={zone} 
+              isSelected={selectedZoneId === zone.id} 
+              isHighlighted={highlightedZoneIds.has(zone.id)} 
+              onClick={() => { setSelectedZoneId(zone.id); setSelectedLocationId(null); }} 
             />
-            <div className="flex gap-2">
-              <button onClick={handleSaveSlot} className="btn-primary flex-1 py-2 text-sm">Save Position</button>
-              <button onClick={() => setPendingMarker(null)} className="btn-ghost flex-1 py-2 text-sm">Cancel</button>
-            </div>
-          </div>
+          ))}
+
+          {/* Physical Stock Items */}
+          {itemLocations.map(loc => (
+            <PhysicalStock 
+              key={loc.id} location={loc} item={items.find(i => i.id === loc.item_id)} 
+              isSelected={selectedLocationId === loc.id}
+              onClick={() => { setSelectedLocationId(loc.id); setSelectedZoneId(null); }}
+            />
+          ))}
+
+          {/* Ghost Placement Box */}
+          {placementMode && ghostPos && (
+            <group position={[ghostPos.x, (ghostPos.normalY > 0.5 ? ghostPos.y + (0.5 * placementMode.qty / 2) : (0.5 * placementMode.qty / 2)), ghostPos.z]}>
+              <mesh>
+                <boxGeometry args={[0.6, 0.5 * placementMode.qty, 0.6]} />
+                <meshStandardMaterial color="#10b981" transparent opacity={0.6} />
+                <Edges color="#34d399" />
+              </mesh>
+            </group>
+          )}
+        </Canvas>
+      </div>
+
+      {/* Right Sidebar (Dynamic Data Display) */}
+      {(selectedZoneId || selectedLocationId) && (
+        <div className="w-80 bg-slate-900 border-l border-slate-700 flex flex-col z-20 shadow-2xl">
+          
+          {/* Context: Section Data */}
+          {selectedZoneId && (
+            <>
+              <div className="p-4 border-b border-slate-700 flex justify-between items-start bg-indigo-900/20">
+                <div>
+                  <h3 className="font-bold text-indigo-400 flex items-center gap-2">
+                    <Layers className="h-4 w-4" /> {filteredZones.find(z => z.id === selectedZoneId)?.zone_name}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">Volumetric Section</p>
+                </div>
+                <button onClick={() => setSelectedZoneId(null)} className="text-slate-400 hover:text-white"><X className="h-4 w-4"/></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-700 pb-1">Items Inside Space</div>
+                {itemsInZone.length === 0 ? (
+                  <div className="text-center py-6 border border-dashed border-slate-700 rounded-lg text-slate-500 text-sm">Space is empty</div>
+                ) : (
+                  itemsInZone.map(loc => {
+                    const itm = items.find(i => i.id === loc.item_id);
+                    if (!itm) return null;
+                    const qtyPerParcel = (itm.p_unit_per_parcel || 1) * (itm.p_unit || 1);
+                    return (
+                      <div key={loc.id} className="p-3 bg-slate-800 rounded-lg border border-slate-700 hover:border-indigo-500/50 cursor-pointer" onClick={() => { setSelectedLocationId(loc.id); setSelectedZoneId(null); }}>
+                        <div className="font-semibold text-sm text-slate-200 truncate">{itm.item_name}</div>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-[10px] px-2 py-0.5 bg-slate-700 rounded-full text-slate-300">{loc.packaging_type || 'Box'}</span>
+                          <div className="text-xs text-amber-400 font-bold flex items-center gap-1"><Boxes className="h-3 w-3"/> {loc.parcel_count} parcels</div>
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1 text-right">({qtyPerParcel} units per parcel)</div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Context: Specific Item Data */}
+          {selectedLocationId && selectedItemLoc && selectedItemDetails && (
+            <>
+              <div className="p-4 border-b border-slate-700 flex justify-between items-start bg-amber-900/20">
+                <div>
+                  <h3 className="font-bold text-amber-400 flex items-center gap-2">
+                    <BoxIcon className="h-4 w-4" /> {selectedItemDetails.item_name}
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-1 font-mono">ID: {selectedItemDetails.keyword_id}</p>
+                </div>
+                <button onClick={() => setSelectedLocationId(null)} className="text-slate-400 hover:text-white"><X className="h-4 w-4"/></button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 text-center">
+                    <div className="text-xs text-slate-400 mb-1">Parcels</div>
+                    <div className="text-xl font-bold text-slate-100">{selectedItemLoc.parcel_count}</div>
+                  </div>
+                  <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 text-center">
+                    <div className="text-xs text-slate-400 mb-1">Packaging</div>
+                    <div className="text-sm font-bold text-slate-300 mt-2">{selectedItemLoc.packaging_type || 'Standard'}</div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700 text-xs text-slate-300 space-y-2">
+                  <div className="flex justify-between"><span>Category:</span> <span className="font-semibold text-slate-100">{selectedItemDetails.category}</span></div>
+                  <div className="flex justify-between"><span>Qty per Parcel:</span> <span className="font-semibold text-slate-100">{(selectedItemDetails.p_unit_per_parcel || 1) * (selectedItemDetails.p_unit || 1)}</span></div>
+                  <div className="flex justify-between"><span>Global Coords:</span> <span className="font-mono text-emerald-400">[{selectedItemLoc.pos_x}, {selectedItemLoc.pos_y}, {selectedItemLoc.pos_z}]</span></div>
+                </div>
+
+                <div className="pt-4 border-t border-slate-700 flex gap-2">
+                  <button className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded font-bold flex justify-center items-center gap-2">
+                    <MoveRight className="h-3 w-3" /> Move
+                  </button>
+                  <button className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded font-bold flex justify-center items-center gap-2">
+                    Sell Units
+                  </button>
+                </div>
+                <button className="w-full py-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-900/50 text-xs rounded font-bold flex justify-center items-center gap-2 mt-2" onClick={async () => {
+                    await DAL.item_locations.softDelete(selectedItemLoc.id);
+                    emitDbChange('item_locations');
+                    setSelectedLocationId(null);
+                }}>
+                  <Trash2 className="h-3 w-3" /> Delete from Space
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
-
-      {/* Main content: canvas + zone panel */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* 3D Canvas */}
-        <div className="flex-1 relative" style={{ background: '#1e293b' }}>
-          {/* Landmark toggle button (bottom-right of canvas) */}
-          <button
-            onClick={() => setIsAddingMarker(!isAddingMarker)}
-            className={`absolute bottom-4 right-4 z-10 px-3 py-2 rounded-lg flex items-center gap-2 text-xs font-medium transition-all shadow-lg ${isAddingMarker
-              ? 'bg-amber-500 text-white ring-2 ring-amber-300'
-              : 'bg-slate-700/90 backdrop-blur-sm text-slate-200 hover:bg-slate-600'
-              }`}
-          >
-            <MapPin className="h-4 w-4" />
-            {isAddingMarker ? 'Cancel Placing' : 'Place Landmark'}
-          </button>
-
-          <Canvas camera={{ position: [15, 20, 15], fov: 45 }} style={{ height: '100%' }}
-          >
-            <color attach="background" args={['#fdfefeff']} />
-            <Scene
-              selectedPlace={selectedPlace ?? null}
-              selectedFloor={selectedFloor}
-              zones={filteredZones}
-              highlightedZoneIds={combinedHighlights}
-              selectedZoneId={selectedZoneId}
-              stockByZone={stockByZone}
-              onZoneClick={handleZoneClick}
-              onZoneHover={handleZoneHover}
-            />
-            <CameraController targetPoint={cameraTarget} />
-          </Canvas>
-
-          {/* Legend (bottom-left) */}
-          <div className="absolute bottom-4 left-4 bg-slate-800/80 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-slate-400">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-indigo-500/40 border border-indigo-500" />
-                <span className='text-slate-200'>Zone</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-amber-500/40 border border-amber-500" />
-                <span className='text-slate-200'>Selected</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-white/40 border border-white animate-pulse" />
-                <span className='text-slate-200'>Search Match</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Zone detail panel */}
-        {selectedZone && (
-          <div className="w-80 bg-slate-900 border-l border-slate-700 flex flex-col">
-            {/* Panel header */}
-            <div className="p-4 border-b border-slate-700">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-slate-100">{selectedZone.zone_name}</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {selectedZone.zone_label || `${selectedPlace?.place_slug}-F${selectedZone.floor_num}-${selectedZone.zone_slug}`}
-                  </p>
-                </div>
-                <button onClick={clearSelection} className="p-1 hover:bg-slate-800 rounded">
-                  <X className="h-4 w-4 text-slate-400" />
-                </button>
-              </div>
-              <div className="flex items-center gap-2 mt-3">
-                <span
-                  className="w-4 h-4 rounded"
-                  style={{ backgroundColor: selectedZone.zone_color || getZoneColor(selectedZone.id) }}
-                />
-                <span className="text-xs text-slate-400">Floor {selectedZone.floor_num}</span>
-              </div>
-            </div>
-
-            {/* Stock list */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Boxes className="h-4 w-4 text-indigo-400" />
-                <h4 className="text-sm font-medium text-slate-200">Stock Items</h4>
-                <span className="ml-auto text-xs text-slate-500">{selectedZoneStock.length} items</span>
-              </div>
-
-              {selectedZoneStock.length > 0 ? (
-                <div className="space-y-2">
-                  {selectedZoneStock.map((stock, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 hover:border-indigo-500/50 transition-colors"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="font-medium text-sm text-slate-200">{stock.item.item_name}</div>
-                        <span className="text-[10px] px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 rounded border border-indigo-500/30">
-                          {(stock.location as any).slot_name || `Slot #${stock.location.slot_id}`}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-2 text-xs text-slate-400">
-                        <span className="flex items-center gap-1">
-                          <Package className="h-3 w-3" />
-                          {stock.packagingType || 'Unpackaged'}
-                        </span>
-                        <span className="flex items-center gap-1 font-bold text-slate-200">
-                          <Boxes className="h-3 w-3" />
-                          {stock.parcelCount}
-                        </span>
-                      </div>
-                      <div className="flex gap-2 mt-3 pt-3 border-t border-slate-700/50">
-                        <button className="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[11px] rounded transition-colors">Move</button>
-                        <button className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] rounded transition-colors">Sell</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Package className="h-8 w-8 text-slate-600 mx-auto mb-2" />
-                  <p className="text-sm text-slate-500">No stock in this zone</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
+}
+
+import { useAppStore } from '@/store/store';
+
+function getFirmId() {
+  return useAppStore.getState().firmId;
 }

@@ -23,7 +23,7 @@
 
 import { supabase } from './supabase';
 import mitt from 'mitt';
-import type { Subcategory } from './types';
+import type { PackageItem, StoragePackage, Subcategory } from './types';
 
 // ─── Reactive Change Emitter ──────────────────────────────────────
 type Events = { change: string };
@@ -54,13 +54,13 @@ export function isMasterAdmin(): boolean {
 // Tables that have a NOT NULL firm_id column
 const FIRM_SCOPED_TABLES = new Set([
     'verticals', 'brands', 'products', 'packing_units', 'items',
-    'prospects', 'orders', 'bills', 'routes', 'visits',
-    'travel_records', 'purchase_orders', 'product_media',
+    'prospects', 'sales_orders', 'bills', 'routes', 'visits',
+    'travel_records', 'purchase_orders', 'item_media',
     'costs', 'account', 'marketing_catalogues', 'warehouse_layout',
     'warehouse_cells', 'stock_movements',
     'storage_places', 'storage_zones', 'storage_slots', 'item_locations',
     'storage_packages', 'package_items',
-    'subcategories'
+    'subcategories', 'stock_details', 'total_stock'
 ]);
 
 // ─── Generic Helpers ──────────────────────────────────────────────
@@ -74,13 +74,12 @@ function withFirmId(table: string, values: any): any {
 }
 
 /**
- * getAll — always filters firm-scoped tables by firm_id.
+ * getAll — filters firm-scoped tables by firm_id.
  * This is intentional: RLS may be disabled (Cloudflare proxy workaround).
  * Manual firm_id filter ensures data isolation regardless of RLS state.
  */
 async function getAll<T>(table: string, extraFilters?: (q: any) => any): Promise<T[]> {
     let q = supabase.from(table).select('*').order('id', { ascending: true });
-    // Manual firm isolation — do not remove even when RLS is re-enabled
     if (FIRM_SCOPED_TABLES.has(table) && getFirmId()) {
         q = q.eq('firm_id', getFirmId());
     }
@@ -136,7 +135,15 @@ export const DAL = {
 
     // ── Reference Data ────────────────────────────────────────────
     verticals: {
-        getAll: () => getAll<any>('verticals'),
+        getAll: async () => {
+            const { data, error } = await supabase
+                .from('verticals')
+                .select('*')
+                .order('sort_order', { ascending: true })
+                .order('name', { ascending: true });
+            if (error) throw error;
+            return data ?? [];
+        },
         add: (val: any) => insert('verticals', val),
         update: (id: number, val: any) => update('verticals', id, val),
         delete: (id: number) => remove('verticals', id),
@@ -153,6 +160,15 @@ export const DAL = {
 
     products: {
         getAll: () => getAll<any>('products'),
+        getByVertical: async (verticalId: number) => {
+            const { data, error } = await supabase
+                .from('products')
+                .select('*')
+                .eq('vertical_id', verticalId)
+                .order('name', { ascending: true });
+            if (error) throw error;
+            return data ?? [];
+        },
         add: (val: any) => insert('products', val),
         update: (id: number, val: any) => update('products', id, val),
         delete: (id: number) => remove('products', id),
@@ -323,6 +339,42 @@ export const DAL = {
 
         /** Use keyword_id as conflict key for items bulk import */
         bulkUpsert: (rows: any[]) => bulkUpsert('items', rows, 'keyword_id'),
+
+        /**
+         * Get items with product and vertical info for hierarchical display
+         * Returns items grouped by vertical -> product
+         */
+        getGrouped: async () => {
+            const { data, error } = await supabase
+                .from('items')
+                .select(`
+                    id, item_name, keyword_id, category,
+                    brand_id, vertical_id, product_id,
+                    stock_parcels, stock_units,
+                    retail_price_unit, retail_price_container,
+                    wholesale_price_unit, wholesale_price_container,
+                    mrp, p_unit, p_unit_per_parcel,
+                    products(id, name, vertical_id)
+                `)
+                .eq('firm_id', getFirmId())
+                .order('item_name', { ascending: true });
+
+            if (error) throw error;
+            return data ?? [];
+        },
+
+        /**
+         * Search items by keyword_id or item_name
+         * Efficient client-side filtering for cached data
+         */
+        searchByKeyword: (items: any[], query: string) => {
+            if (!query.trim()) return items;
+            const q = query.toLowerCase();
+            return items.filter((item: any) =>
+                item.item_name?.toLowerCase().includes(q) ||
+                item.keyword_id?.toLowerCase().includes(q)
+            );
+        },
     },
 
     // ── CRM ────────────────────────────────────────────────────────
@@ -334,46 +386,86 @@ export const DAL = {
         bulkUpsert: (rows: any[]) => bulkUpsert('prospects', rows),
     },
 
-    // ── Orders ─────────────────────────────────────────────────────
-    orders: {
-        getAll: () => getAll<any>('orders'),
+    // ── Sales Orders ─────────────────────────────────────────────────────
+    sales_orders: {
+        getAll: () => getAll<any>('sales_orders'),
 
         getPendingPayments: async () => {
             const { data, error } = await supabase
-                .from('orders')
+                .from('sales_orders')
                 .select('*, prospects(prospectname, contact)')
                 .eq('firm_id', getFirmId())
-                .eq('status', 'dispatched')
-                .neq('payment_status', 'paid')
+                .is('end_of_sale', false)
+                .gt('due_amount', 0)
                 .order('due_date', { ascending: true });
             if (error) throw error;
             return data;
         },
 
-        add: (val: any) => insert('orders', { ...val, created_at: new Date().toISOString() }),
-        update: (id: number, val: any) => update('orders', id, val),
-        delete: (id: number) => remove('orders', id),
+        add: (val: any) => insert('sales_orders', { ...val, created_at: new Date().toISOString() }),
+        update: (id: number, val: any) => update('sales_orders', id, val),
+        delete: (id: number) => remove('sales_orders', id),
+        
+        /**
+         * End of sale: copy order to bills and delete from sales_orders
+         */
+        endOfSale: async (orderId: number) => {
+            const { data: order, error: orderError } = await supabase
+                .from('sales_orders')
+                .select('*, prospects(prospectname), sales_order_items(*)')
+                .eq('id', orderId)
+                .eq('firm_id', getFirmId())
+                .single();
+            if (orderError) throw orderError;
+            
+            // Create bill from order
+            const billData = {
+                firm_id: getFirmId(),
+                bill_number: `BILL-${Date.now()}`,
+                prospect_id: order.prospect_id,
+                grand_total: order.grand_total,
+                paid_amount: order.paid_amount,
+                notes: order.notes,
+            };
+            
+            const { data: bill, error: billError } = await supabase
+                .from('bills')
+                .insert(billData)
+                .select()
+                .single();
+            if (billError) throw billError;
+            
+            // Mark order as end_of_sale (don't delete, just mark)
+            await supabase
+                .from('sales_orders')
+                .update({ end_of_sale: true })
+                .eq('id', orderId);
+            
+            emitDbChange('sales_orders');
+            emitDbChange('bills');
+            return bill;
+        },
     },
 
-    order_items: {
+    sales_order_items: {
         /**
          * Fixed: verifies order belongs to current firm before returning items.
          * Prevents cross-firm data leak when RLS is disabled.
          */
         getByOrder: async (orderId: number) => {
             const { data, error } = await supabase
-                .from('order_items')
-                .select('*, orders!inner(firm_id)')
-                .eq('order_id', orderId)
-                .eq('orders.firm_id', getFirmId());
+                .from('sales_order_items')
+                .select('*, sales_orders!inner(firm_id)')
+                .eq('sales_order_id', orderId)
+                .eq('sales_orders.firm_id', getFirmId());
             if (error) throw error;
-            // Strip the joined orders.firm_id from response
-            return (data ?? []).map(({ orders: _o, ...rest }: any) => rest);
+            // Strip the joined sales_orders.firm_id from response
+            return (data ?? []).map(({ sales_orders: _o, ...rest }: any) => rest);
         },
 
-        add: (val: any) => insert('order_items', val),
-        update: (id: number, val: any) => update('order_items', id, val),
-        delete: (id: number) => remove('order_items', id),
+        add: (val: any) => insert('sales_order_items', val),
+        update: (id: number, val: any) => update('sales_order_items', id, val),
+        delete: (id: number) => remove('sales_order_items', id),
     },
 
     bills: {
@@ -406,30 +498,85 @@ export const DAL = {
     },
 
     purchase_orders: {
-        getAll: () => getAll<any>('purchase_orders', q =>
-            q.select('*, suppliers(name, contact)')),
+        getAll: () => getAll<any>('purchase_orders'),
 
         getBySupplier: async (supplierId: number) => {
             const { data, error } = await supabase
                 .from('purchase_orders')
-                .select('*, purchase_order_items(*)')
-                .eq('supplier_id', supplierId)
+                .select('*, purchase_log(supplier_id, shipment_date)')
                 .eq('firm_id', getFirmId())
-                .order('order_date', { ascending: false });
+                .order('id', { ascending: false });
             if (error) throw error;
             return data;
         },
 
-        add: (val: any) => insert('purchase_orders', { ...val, created_at: new Date().toISOString() }),
+        add: (val: any) => insert('purchase_orders', val),
         update: (id: number, val: any) => update('purchase_orders', id, val),
         delete: (id: number) => remove('purchase_orders', id),
-        bulkUpsert: (rows: any[]) => bulkUpsert('purchase_orders', rows),
     },
 
-    purchase_order_items: {
-        add: (val: any) => insert('purchase_order_items', val),
-        update: (id: number, val: any) => update('purchase_order_items', id, val),
-        delete: (id: number) => remove('purchase_order_items', id),
+    purchase_log: {
+        getAll: () => getAll<any>('purchase_log'),
+        getBySupplier: async (supplierId: number) => {
+            const { data, error } = await supabase
+                .from('purchase_log')
+                .select('*, suppliers(name)')
+                .eq('supplier_id', supplierId)
+                .order('purchase_date', { ascending: false });
+            if (error) throw error;
+            return data;
+        },
+        add: (val: any) => insert('purchase_log', { ...val, purchase_date: new Date().toISOString() }),
+        update: (id: number, val: any) => update('purchase_log', id, val),
+        delete: (id: number) => remove('purchase_log', id),
+    },
+
+    // ── Stock & Pricing ────────────────────────────────────────────
+    stock_details: {
+        getAll: () => getAll<any>('stock_details'),
+        getByItem: async (itemId: number) => {
+            const { data, error } = await supabase
+                .from('stock_details')
+                .select('*')
+                .eq('item_id', itemId)
+                .eq('firm_id', getFirmId());
+            if (error) throw error;
+            return data ?? [];
+        },
+        add: (val: any) => insert('stock_details', { ...val, last_updated: new Date().toISOString() }),
+        update: (id: number, val: any) => update('stock_details', id, { ...val, last_updated: new Date().toISOString() }),
+        delete: (id: number) => remove('stock_details', id),
+    },
+
+    total_stock: {
+        getAll: () => getAll<any>('total_stock'),
+        getByKeyword: async (keyword: string) => {
+            const { data, error } = await supabase
+                .from('total_stock')
+                .select('*')
+                .eq('item_keyword', keyword)
+                .eq('firm_id', getFirmId())
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        add: (val: any) => insert('total_stock', { ...val, updated_at: new Date().toISOString() }),
+        update: (id: number, val: any) => update('total_stock', id, { ...val, updated_at: new Date().toISOString() }),
+        delete: (id: number) => remove('total_stock', id),
+    },
+
+    cost_types: {
+        getAll: () => getAll<any>('cost_types'),
+        add: (val: any) => insert('cost_types', val),
+        update: (id: number, val: any) => update('cost_types', id, val),
+        delete: (id: number) => remove('cost_types', id),
+    },
+
+    categories: {
+        getAll: () => getAll<any>('categories'),
+        add: (val: any) => insert('categories', val),
+        update: (id: number, val: any) => update('categories', id, val),
+        delete: (id: number) => remove('categories', id),
     },
 
     // ── Routes & Visits ────────────────────────────────────────────
@@ -470,19 +617,29 @@ export const DAL = {
     },
 
     // ── Media ──────────────────────────────────────────────────────
-    product_media: {
+    item_media: {
+        getAll: () => getAll<any>('item_media'),
         getByItem: async (itemId: number) => {
             const { data, error } = await supabase
-                .from('product_media')
+                .from('item_media')
                 .select('*')
+                .eq('item_id', itemId)
+                .eq('firm_id', getFirmId())
+                .order('created_at', { ascending: true });
+            if (error) throw error;
+            return data || [];
+        },
+        add: (val: any) => insert('item_media', { ...val, created_at: new Date().toISOString() }),
+        update: (id: number, val: any) => update('item_media', id, val),
+        delete: (id: number) => remove('item_media', id),
+        deleteByItem: async (itemId: number) => {
+            const { error } = await supabase
+                .from('item_media')
+                .delete()
                 .eq('item_id', itemId)
                 .eq('firm_id', getFirmId());
             if (error) throw error;
-            return data;
         },
-        add: (val: any) => insert('product_media', { ...val, created_at: new Date().toISOString() }),
-        update: (id: number, val: any) => update('product_media', id, val),
-        delete: (id: number) => remove('product_media', id),
     },
 
     // ── Financials ─────────────────────────────────────────────────
@@ -639,15 +796,15 @@ export const DAL = {
         getBrandMetrics: async (from: string, to: string) => {
             // Fixed: filter orders by firm_id to prevent cross-firm aggregation
             const { data: orderItems, error } = await supabase
-                .from('order_items')
+                .from('sales_order_items')
                 .select(`
                     total,
-                    items!inner(brand_id, vertical_id, retail_price_container, stock_parcels),
-                    orders!inner(created_at, grand_total, firm_id)
+                    items!inner(brand_id, vertical_id),
+                    sales_orders!inner(created_at, firm_id)
                 `)
-                .eq('orders.firm_id', getFirmId())
-                .gte('orders.created_at', from)
-                .lte('orders.created_at', to);
+                .eq('sales_orders.firm_id', getFirmId())
+                .gte('sales_orders.created_at', from)
+                .lte('sales_orders.created_at', to);
             if (error) throw error;
 
             const { data: brands } = await supabase
@@ -677,16 +834,16 @@ export const DAL = {
         getAccountFlow: async (from: string, to: string) => {
             // Fixed: all queries now scoped to getFirmId()
             const firmId = getFirmId();
-            const oQ = supabase.from('orders')
+            const oQ = supabase.from('sales_orders')
                 .select('grand_total, paid_amount, due_amount')
                 .eq('firm_id', firmId)
                 .gte('created_at', from)
                 .lte('created_at', to);
-            const pQ = supabase.from('purchase_orders')
-                .select('total_cost')
+            const pQ = supabase.from('purchase_log')
+                .select('total_amount')
                 .eq('firm_id', firmId)
-                .gte('created_at', from)
-                .lte('created_at', to);
+                .gte('purchase_date', from)
+                .lte('purchase_date', to);
             const cQ = supabase.from('costs')
                 .select('amount')
                 .eq('firm_id', firmId)
@@ -713,11 +870,11 @@ export const DAL = {
 
         getVerticalSummary: async (from: string, to: string) => {
             const { data: orderItems, error } = await supabase
-                .from('order_items')
-                .select('total, items!inner(vertical_id, verticals!inner(name)), orders!inner(created_at, firm_id)')
-                .eq('orders.firm_id', getFirmId())
-                .gte('orders.created_at', from)
-                .lte('orders.created_at', to);
+                .from('sales_order_items')
+                .select('total, items!inner(vertical_id, verticals!inner(name)), sales_orders!inner(created_at, firm_id)')
+                .eq('sales_orders.firm_id', getFirmId())
+                .gte('sales_orders.created_at', from)
+                .lte('sales_orders.created_at', to);
             if (error) throw error;
 
             const map: Record<number, { name: string; revenue: number }> = {};
@@ -777,7 +934,7 @@ export const DAL = {
     reports: {
         getSalesSummary: async (from: string, to: string) => {
             const { data: orders, error } = await supabase
-                .from('orders')
+                .from('sales_orders')
                 .select('*, prospects(prospectname, contact, area_town)')
                 .eq('firm_id', getFirmId())
                 .gte('created_at', from)
@@ -793,8 +950,8 @@ export const DAL = {
 
         getTopProspects: async (from: string, to: string, limit = 10) => {
             const { data, error } = await supabase
-                .from('orders')
-                .select('prospect_id, prospect_name, grand_total, paid_amount, due_amount')
+                .from('sales_orders')
+                .select('prospect_id, prospects(prospectname), grand_total, paid_amount, due_amount')
                 .eq('firm_id', getFirmId())
                 .gte('created_at', from)
                 .lte('created_at', to);
@@ -802,10 +959,12 @@ export const DAL = {
 
             const map: Record<number, { name: string; revenue: number; due: number; orders: number }> = {};
             for (const o of (data ?? [])) {
-                if (!map[o.prospect_id]) map[o.prospect_id] = { name: o.prospect_name, revenue: 0, due: 0, orders: 0 };
-                map[o.prospect_id].revenue += Number(o.grand_total ?? 0);
-                map[o.prospect_id].due += Number(o.due_amount ?? 0);
-                map[o.prospect_id].orders += 1;
+                const prospectId = o.prospect_id;
+                const prospectName = (o.prospects as any)?.prospectname ?? 'Unknown';
+                if (!map[prospectId]) map[prospectId] = { name: prospectName, revenue: 0, due: 0, orders: 0 };
+                map[prospectId].revenue += Number(o.grand_total ?? 0);
+                map[prospectId].due += Number(o.due_amount ?? 0);
+                map[prospectId].orders += 1;
             }
             return Object.values(map)
                 .sort((a, b) => b.revenue - a.revenue)
@@ -815,20 +974,15 @@ export const DAL = {
         getStockSnapshot: async () => {
             const { data, error } = await supabase
                 .from('items')
-                .select('item_name, keyword_id, category, stock_parcels, stock_units, retail_price_container, wholesale_price_container, p_unit, p_unit_per_parcel, reorder_threshold')
-                .eq('firm_id', getFirmId())
-                .order('stock_parcels', { ascending: false });
+                .select('item_name, keyword_id')
+                .eq('firm_id', getFirmId());
             if (error) throw error;
-            return (data ?? []).map((i: any) => ({
-                ...i,
-                stock_value: Number(i.stock_parcels ?? 0) * Number(i.retail_price_container ?? 0),
-                below_reorder: Number(i.stock_parcels ?? 0) <= Number(i.reorder_threshold ?? 0),
-            }));
+            return data ?? [];
         },
 
         getCustomerDues: async () => {
             const { data, error } = await supabase
-                .from('orders')
+                .from('sales_orders')
                 .select('*, prospects(prospectname, contact)')
                 .eq('firm_id', getFirmId())
                 .gt('due_amount', 0)
@@ -1014,6 +1168,9 @@ export const DAL = {
             place_slug: string;
             place_type?: string;
             floor_count?: number;
+            width_meters?: number;  // NEW
+            depth_meters?: number;  // NEW
+            height_meters?: number;  // NEW
             top_view_image_url?: string;
             notes?: string;
         }) => {
@@ -1032,6 +1189,9 @@ export const DAL = {
             place_slug: string;
             place_type: string;
             floor_count: number;
+            width_meters: number;  // NEW
+            depth_meters: number;  // NEW
+            height_meters: number;  // NEW
             top_view_image_url: string;
             notes: string;
         }>) => {
@@ -1249,6 +1409,32 @@ export const DAL = {
     // ── Spatial: Stock ↔ Slot Assignments ─────────────────────────
 
     item_locations: {
+
+        create: async (val: {
+            item_id: number;
+            slot_id: number;
+            parcel_count: number;
+            is_primary?: boolean;
+            packaging_type?: string;
+            packaging_tags?: string[];
+        }) => {
+            const { data, error } = await supabase
+                .from('item_locations')
+                .insert({ ...val, firm_id: getFirmId(), updated_at: new Date().toISOString() })
+                .select()
+                .single();
+
+            if (error) {
+                // Catch UNIQUE constraint violation (item already in this slot)
+                if (error.code === '23505') {
+                    return DAL.item_locations.assign(val);
+                }
+                throw error;
+            }
+            emitDbChange('item_locations');
+            return data;
+        },
+
         /** All active location assignments for this firm */
         getAll: (slotId?: number) =>
             getAll<any>('item_locations', q => {
@@ -1551,4 +1737,6 @@ export const DAL = {
         if (error) throw error;
         emitDbChange('storage_packages');
     },
+
+    
 };

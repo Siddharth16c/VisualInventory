@@ -1,4 +1,4 @@
-import { ProductMedia } from '@/db/dexie';
+import type { ItemMedia } from '@/db/types';
 
 export interface CatalogueItem {
     id: number;
@@ -12,7 +12,7 @@ export interface CatalogueItem {
     description?: string;
     retail_price?: number;
     wholesale_price?: number;
-    media: ProductMedia[];
+    media: ItemMedia[];
 }
 
 export interface BusinessProfile {
@@ -24,18 +24,29 @@ export interface BusinessProfile {
     gstin?: string;
 }
 
-export const generateFlipbookHtml = async (items: CatalogueItem[], profile: BusinessProfile): Promise<string> => {
-    // 1. Process Images to Base64
-    const processedItems = await Promise.all(items.map(async (item) => {
-        const mediaWithBase64 = await Promise.all(item.media.map(async (m) => {
-            const base64 = await blobToBase64(m.data);
-            return { ...m, base64 };
-        }));
-        return { ...item, media: mediaWithBase64 };
-    }));
+export interface CatalogueConfig {
+    title?: string;
+    showPrices?: boolean;
+    priceType?: 'retail' | 'wholesale' | 'both';
+}
 
-    // 2. Group items by Category or Vertical for sections (Optional, for now flat list or user order)
-    // The items are already in the 'user defined' order from the Draft list.
+export const generateFlipbookHtml = async (
+    items: CatalogueItem[], 
+    profile: BusinessProfile,
+    config: CatalogueConfig = {}
+): Promise<string> => {
+    const { 
+        title = `${profile.business_name} Catalogue`,
+        showPrices = true,
+        priceType = 'retail'
+    } = config;
+    const processedItems = items.map(item => ({
+        ...item,
+        media: item.media.map(m => ({
+            ...m,
+            base64: m.data_base64
+        }))
+    }));
 
     const date = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -50,7 +61,7 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
         :root {
             --primary: #1a1a1a;
             --secondary: #404040;
-            --accent: #d4a017; /* Gold accent for classy look */
+            --accent: #d4a017;
             --bg: #f5f5f5;
             --card-bg: #ffffff;
             --text: #333333;
@@ -69,7 +80,6 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
             margin: 0 auto;
         }
 
-        /* Cover Page */
         .cover {
             text-align: center;
             padding: 60px 20px;
@@ -94,14 +104,12 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
         .catalogue-title { font-size: 1.2rem; text-transform: uppercase; letter-spacing: 4px; color: var(--accent); margin-bottom: 30px; }
         .contact-info { font-size: 0.9rem; opacity: 0.8; }
 
-        /* Grid Layout */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 25px;
         }
 
-        /* Product Card */
         .card {
             background: var(--card-bg);
             border-radius: 12px;
@@ -117,11 +125,10 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
         }
 
-        /* Image Stack / Media Area */
         .media-container {
             position: relative;
             width: 100%;
-            padding-top: 100%; /* 1:1 Aspect Ratio */
+            padding-top: 100%;
             background: #f0f0f0;
             overflow: hidden;
             cursor: pointer;
@@ -133,11 +140,10 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
             left: 0;
             width: 100%;
             height: 100%;
-            object-fit: contain; /* or cover, depending on preference */
+            object-fit: contain;
             transition: transform 0.5s ease;
         }
 
-        /* Stack Effect for multiple images */
         .stack-indicator {
             position: absolute;
             bottom: 10px;
@@ -205,7 +211,6 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
         
         .price-label { font-size: 0.7rem; font-weight: 400; color: var(--text-light); margin-right: 2px; }
 
-        /* Lightbox / Stack View */
         .lightbox {
             display: none;
             position: fixed;
@@ -270,7 +275,6 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* Footer */
         .footer {
             text-align: center;
             margin-top: 60px;
@@ -291,7 +295,7 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
     <div class="cover">
         <div class="cover-content">
             <h1 class="business-name">${profile.business_name}</h1>
-            <div class="catalogue-title">Product Catalogue • ${date}</div>
+            <div class="catalogue-title">${title} • ${date}</div>
             <div class="contact-info">
                 ${profile.address ? `<p>${profile.address}</p>` : ''}
                 ${profile.contact ? `<p>Tel: ${profile.contact}</p>` : ''}
@@ -302,7 +306,9 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
 
     <div class="grid">
         ${processedItems.map((item, index) => {
-        const mainImage = item.media.length > 0 ? item.media[0].base64 : null;
+        // Use primary image for catalogue, or first image as fallback
+        const primaryMedia = item.media.find(m => m.media_role === 'primary');
+        const mainImage = primaryMedia ? primaryMedia.base64 : (item.media.length > 0 ? item.media[0].base64 : null);
         const hasStack = item.media.length > 1;
 
         return `
@@ -316,18 +322,28 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
                 </div>
                 <div class="card-content">
                     ${item.brand_name ? `<div class="brand-tag">${item.brand_name}</div>` : ''}
+                    ${item.product_name ? `<div class="product-tag" style="font-size: 0.75rem; color: var(--text-light); margin-bottom: 3px;">${item.product_name}</div>` : ''}
                     <h3 class="item-name">${item.item_name}</h3>
                     <div class="category-name">${item.vertical_name ? item.vertical_name + ' • ' : ''}${item.category}</div>
                     
+                    ${showPrices ? `
                     <div class="details-row">
                         <div class="variants">
                             ${item.variant1 ? item.variant1 : ''} ${item.variant2 ? '• ' + item.variant2 : ''}
                         </div>
-                        ${item.retail_price
-                ? `<div class="price"><span class="price-label">MRP</span>₹${item.retail_price}</div>`
-                : ''
-            }
+                        ${priceType === 'retail' && item.retail_price
+                            ? `<div class="price"><span class="price-label">MRP</span>₹${item.retail_price}</div>`
+                            : priceType === 'wholesale' && item.wholesale_price
+                                ? `<div class="price wholesale"><span class="price-label">WS</span>₹${item.wholesale_price}</div>`
+                                : priceType === 'both' && (item.retail_price || item.wholesale_price)
+                                    ? `<div class="prices">
+                                        ${item.retail_price ? `<div class="price"><span class="price-label">MRP</span>₹${item.retail_price}</div>` : ''}
+                                        ${item.wholesale_price ? `<div class="price wholesale" style="margin-top: 4px;"><span class="price-label">WS</span>₹${item.wholesale_price}</div>` : ''}
+                                       </div>`
+                                    : ''
+                        }
                     </div>
+                    ` : ''}
                 </div>
             </div>
             `;
@@ -339,19 +355,15 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
         <p style="font-size: 0.8rem; margin-top: 5px;">Generated by VisualOS</p>
     </div>
 
-    <!-- Lightbox Structure -->
     <div id="lightbox" class="lightbox">
         <button class="close-btn" onclick="closeLightbox()">&times;</button>
         <div class="lightbox-content">
             <img id="lb-image" class="lightbox-img" src="" alt="Zoomed">
         </div>
-        <div id="lb-thumbnails" class="lightbox-thumbnails">
-            <!-- Thumbs injected via JS -->
-        </div>
+        <div id="lb-thumbnails" class="lightbox-thumbnails"></div>
     </div>
 
     <script>
-        // Data injected from build
         const items = ${JSON.stringify(processedItems.map(i => ({
         name: i.item_name,
         media: i.media.map(m => m.base64)
@@ -368,7 +380,6 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
             lightbox.classList.add('active');
             showImage(item, 0);
             
-            // Generate thumbnails
             lbThumbs.innerHTML = item.media.map((src, i) => \`
                 <img src="\${src}" class="thumb \${i === 0 ? 'active' : ''}" onclick="showImage(items[\${index}], \${i})">
             \`).join('');
@@ -376,8 +387,6 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
 
         function showImage(item, imgIndex) {
             lbImage.src = item.media[imgIndex];
-            
-            // Update active state of thumbs
             const thumbs = document.querySelectorAll('.thumb');
             thumbs.forEach((t, i) => {
                 if (i === imgIndex) t.classList.add('active');
@@ -389,12 +398,10 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
             lightbox.classList.remove('active');
         }
 
-        // Close on background click
         lightbox.addEventListener('click', (e) => {
             if (e.target === lightbox) closeLightbox();
         });
 
-        // Keyboard support
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') closeLightbox();
         });
@@ -402,13 +409,4 @@ export const generateFlipbookHtml = async (items: CatalogueItem[], profile: Busi
 </body>
 </html>
     `;
-};
-
-const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-    });
 };

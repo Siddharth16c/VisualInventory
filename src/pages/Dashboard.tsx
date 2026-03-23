@@ -1,15 +1,16 @@
 import { useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/dexie';
+import { useLiveQuery } from '@/db/local/hooks';
+import * as db from '@/db/local/queries';
+import { DAL, getFirmId } from '@/db/dal';
 import { useAppStore } from '@/store/store';
 import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users, Package, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
-    const orders = useLiveQuery(() => db.orders.toArray()) || [];
-    const items = useLiveQuery(() => db.items.toArray()) || [];
-    const prospects = useLiveQuery(() => db.prospects.toArray()) || [];
-    const costs = useLiveQuery(() => db.costs.toArray()) || [];
+    const orders = useLiveQuery(() => db.getOrders(getFirmId())) || [];
+    const items = useLiveQuery(() => db.getItems(getFirmId())) || [];
+    const prospects = useLiveQuery(() => db.getProspects(getFirmId())) || [];
+    const costs = useLiveQuery(() => DAL.costs.getAll()) || [];
     const activeBusiness = useAppStore((s) => s.activeBusiness);
 
     const stats = useMemo(() => {

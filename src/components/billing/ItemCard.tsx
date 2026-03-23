@@ -1,5 +1,5 @@
 import { Plus, Package } from 'lucide-react';
-import type { Item } from '@/db/dexie';
+import type { Item } from '@/db/types';
 
 interface ItemCardProps {
     item: Item;
@@ -7,7 +7,8 @@ interface ItemCardProps {
     onAddToCart: (item: Item) => void;
 }
 
-const getCategoryIcon = (category: string): string => {
+const getCategoryIcon = (category: string | undefined | null): string => {
+    if (!category) return '📦';
     const iconMap: Record<string, string> = {
         'stationery': '✏️',
         'cutlery': '🍴',
@@ -58,6 +59,7 @@ export default function ItemCard({ item, pricingMode, onAddToCart }: ItemCardPro
     const icon = getCategoryIcon(item.category);
     const stockStatus = getStockStatus(item.stock_parcels ?? 0);
     const isOutOfStock = (item.stock_parcels ?? 0) === 0;
+    const thumbnail = (item as any).thumbnail_base64;
 
     return (
         <div 
@@ -70,17 +72,25 @@ export default function ItemCard({ item, pricingMode, onAddToCart }: ItemCardPro
             `}
             onClick={() => !isOutOfStock && onAddToCart(item)}
         >
-            {/* Icon - Compact */}
+            {/* Icon/Thumbnail */}
             <div className="w-full aspect-square rounded bg-surface-100 flex items-center justify-center text-2xl mb-1 overflow-hidden">
-                {icon}
+                {thumbnail ? (
+                    <img 
+                        src={thumbnail} 
+                        alt={item.item_name}
+                        className="w-full h-full object-cover rounded"
+                    />
+                ) : (
+                    icon
+                )}
             </div>
 
-            {/* Stock Badge - Top Right */}
+            {/* Stock Badge */}
             <div className={`absolute top-1 right-1 px-1 py-0.5 rounded text-[8px] font-medium ${stockStatus.color}`}>
                 {stockStatus.label}
             </div>
 
-            {/* Item Name - Truncated */}
+            {/* Item Name */}
             <h4 className="text-[10px] font-medium text-surface-900 line-clamp-2 leading-tight h-[24px]">
                 {item.item_name}
             </h4>
@@ -104,7 +114,7 @@ export default function ItemCard({ item, pricingMode, onAddToCart }: ItemCardPro
                 )}
             </div>
 
-            {/* Parcels indicator - Very compact */}
+            {/* Parcels */}
             <div className="flex items-center gap-0.5 mt-0.5 text-[8px] text-surface-400">
                 <Package className="h-2.5 w-2.5" />
                 <span>{item.stock_parcels}p</span>

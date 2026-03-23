@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { db } from '@/db/dexie';
-import { getStorageEstimate } from '@/db/dexie';
+import { exportDatabaseFile, importDatabaseFile, getDatabaseSize } from '@/db/local/db';
 import { useAppStore } from '@/store/store';
 import { Download, Upload, Database, HardDrive, Loader2, AlertTriangle, Settings, Tag, Layers, Package, Box } from 'lucide-react';
 import { downloadBlob } from '@/utils/share';
@@ -14,8 +13,18 @@ export default function Maintenance() {
     const [activeManager, setActiveManager] = useState<string | null>(null);
 
     const loadStorageInfo = async () => {
-        const info = await getStorageEstimate();
-        setStorageInfo(info);
+        let usage = 0;
+        let quota = 5 * 1024 * 1024 * 1024; // 5GB fallback 
+        try {
+            usage = await getDatabaseSize();
+            if (navigator.storage && navigator.storage.estimate) {
+                const est = await navigator.storage.estimate();
+                if (est.quota) quota = est.quota;
+            }
+        } catch (e) {
+            console.error(e);
+        }
+        setStorageInfo({ usage, quota });
     };
 
     const formatBytes = (bytes: number) => {
@@ -29,38 +38,8 @@ export default function Maintenance() {
     const handleExport = async () => {
         setIsExporting(true);
         try {
-            const backup: Record<string, any[]> = {};
-
-            // Export all tables (including item_types)
-            const tableNames = [
-                'items', 'products', 'prospects', 'orders', 'order_items',
-                'travel_records', 'visits', 'costs', 'account',
-                'marketing_catalogues', 'verticals', 'brands',
-                'packing_units', 'variant_params_1', 'variant_params_2', 'variant_params_3', 'bills', 'business_config',
-            ];
-
-            for (const name of tableNames) {
-                const table = (db as any)[name];
-                if (table) {
-                    backup[name] = await table.toArray();
-                }
-            }
-
-            // Handle product_media separately (has Blob data)
-            const mediaItems = await db.product_media.toArray();
-            backup['product_media'] = await Promise.all(
-                mediaItems.map(async (m) => {
-                    const arrayBuffer = await (m.data as Blob).arrayBuffer();
-                    const base64 = btoa(
-                        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-                    );
-                    return { ...m, data: base64, _blob_encoded: true };
-                })
-            );
-
-            const json = JSON.stringify(backup, null, 2);
-            const blob = new Blob([json], { type: 'application/json' });
-            downloadBlob(blob, `visualos-backup-${new Date().toISOString().split('T')[0]}.json`);
+            const blob = await exportDatabaseFile();
+            downloadBlob(blob, `visualos-backup-${new Date().toISOString().split('T')[0]}.sqlite`);
             addToast('Backup exported successfully', 'success');
         } catch (e) {
             addToast('Export failed', 'error');
@@ -74,61 +53,17 @@ export default function Maintenance() {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        // Confirm before overwriting
+        if (!confirm('This will replace ALL existing local data with the imported database. Continue?')) {
+            e.target.value = '';
+            return;
+        }
+
         setIsImporting(true);
         try {
-            const text = await file.text();
-            let backup: Record<string, any[]>;
-
-            try {
-                backup = JSON.parse(text);
-            } catch {
-                addToast('Invalid JSON file', 'error');
-                setIsImporting(false);
-                return;
-            }
-
-            if (typeof backup !== 'object' || backup === null) {
-                addToast('Invalid backup format', 'error');
-                setIsImporting(false);
-                return;
-            }
-
-            // Confirm before overwriting
-            if (!confirm('This will replace ALL existing data. Continue?')) {
-                setIsImporting(false);
-                return;
-            }
-
-            // Clear all tables then import
-            const tableNames = Object.keys(backup);
-            for (const name of tableNames) {
-                const table = (db as any)[name];
-                if (table) {
-                    await table.clear();
-
-                    let items = backup[name];
-
-                    // Decode base64 blobs for product_media
-                    if (name === 'product_media') {
-                        items = items.map((m: any) => {
-                            if (m._blob_encoded && typeof m.data === 'string') {
-                                const binary = atob(m.data);
-                                const bytes = new Uint8Array(binary.length);
-                                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-                                const restored = { ...m, data: new Blob([bytes], { type: m.mime_type }) };
-                                delete restored._blob_encoded;
-                                return restored;
-                            }
-                            return m;
-                        });
-                    }
-
-                    // Remove IDs to let auto-increment work, or keep them if needed
-                    await table.bulkAdd(items);
-                }
-            }
-
-            addToast('Backup imported successfully!', 'success');
+            await importDatabaseFile(file);
+            addToast('Backup imported successfully! Reloading...', 'success');
+            setTimeout(() => window.location.reload(), 1000);
         } catch (e: any) {
             addToast(`Import failed: ${e.message}`, 'error');
             console.error(e);

@@ -5,7 +5,7 @@ import { useAppStore } from '@/store/store';
 import { Plus, Trash2, X, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 
 export default function Accounting() {
-    const orders = useSupabaseQuery(['orders'], () => DAL.orders.getAll(), []);
+    const orders = useSupabaseQuery(['orders'], () => DAL.sales_orders.getAll(), []);
     const costs = useSupabaseQuery(['costs'], () => DAL.costs.getAll(), []);
     const addToast = useAppStore((s) => s.addToast);
     const [showModal, setShowModal] = useState(false);

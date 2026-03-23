@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Prospect } from '@/db/dexie';
+import { useLiveQuery } from '@/db/local/hooks';
+import * as db from '@/db/local/queries';
+import { getFirmId } from '@/db/dal';
+import type { Prospect } from '@/db/types';
 import { useAppStore } from '@/store/store';
 import { Plus, Search, Pencil, Trash2, X, MapPin, Phone, Building } from 'lucide-react';
 
@@ -17,10 +19,10 @@ function ProspectModal({ prospect, onClose }: { prospect: Prospect | null; onClo
         }
         try {
             if (prospect?.id) {
-                await db.prospects.update(prospect.id, form);
+                await db.updateProspect(prospect.id, form);
                 addToast('Prospect updated', 'success');
             } else {
-                await db.prospects.add({ ...form, createdAt: new Date().toISOString() } as Prospect);
+                await db.insertProspect(getFirmId(), { ...form, createdAt: new Date().toISOString() } as Prospect);
                 addToast('Prospect added', 'success');
             }
             onClose();
@@ -70,7 +72,7 @@ function ProspectModal({ prospect, onClose }: { prospect: Prospect | null; onClo
 }
 
 export default function Prospects() {
-    const prospects = useLiveQuery(() => db.prospects.toArray()) || [];
+    const prospects = useLiveQuery(() => db.getProspects(getFirmId())) || [];
     const addToast = useAppStore((s) => s.addToast);
     const [search, setSearch] = useState('');
     const [showModal, setShowModal] = useState(false);
@@ -85,7 +87,7 @@ export default function Prospects() {
 
     const handleDelete = async (id: number) => {
         if (confirm('Delete this prospect?')) {
-            await db.prospects.delete(id);
+            await db.deleteProspect(id);
             addToast('Prospect deleted', 'info');
         }
     };

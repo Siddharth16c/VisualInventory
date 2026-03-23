@@ -10,7 +10,7 @@ import {
     DollarSign
 } from 'lucide-react';
 import { useAppStore } from '@/store/store';
-import type { Prospect } from '@/db/dexie';
+import type { Prospect } from '@/db/types';
 
 interface BillDetailsPanelProps {
     prospects: Prospect[];
@@ -383,6 +383,12 @@ export default function BillDetailsPanel({
                         <PaymentBadge status={paymentStatus} />
                     </div>
 
+                    {/* Grand Total - Prominent */}
+                    <div className="text-center bg-surface-50 rounded-lg p-3">
+                        <p className="text-xs text-surface-500 mb-1">Grand Total</p>
+                        <p className="text-2xl font-bold text-surface-900">₹{grandTotal.toFixed(2)}</p>
+                    </div>
+
                     {/* Paid Amount */}
                     <div className="flex items-center justify-between text-sm">
                         <span className="text-surface-500">Paid Amount</span>
@@ -395,12 +401,51 @@ export default function BillDetailsPanel({
                         />
                     </div>
 
-                    {/* Due Amount */}
-                    <div className="flex justify-between text-sm">
-                        <span className="text-surface-500">Due Amount</span>
-                        <span className={`font-semibold ${dueAmount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                            ₹{dueAmount.toFixed(2)}
-                        </span>
+                    {/* Credit/Due Amount - Prominent for unpaid bills */}
+                    {dueAmount > 0 && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-red-700">Credit / Due</span>
+                                <span className="text-lg font-bold text-red-700">₹{dueAmount.toFixed(2)}</span>
+                            </div>
+                            <p className="text-xs text-red-600 mt-1">
+                                Customer will pay later
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Quick Payment Buttons */}
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setPaidAmount(0)}
+                            className={`flex-1 py-1.5 text-xs font-medium rounded border ${
+                                paid === 0
+                                    ? 'bg-red-100 border-red-300 text-red-700'
+                                    : 'bg-white border-surface-300 text-surface-600 hover:bg-surface-50'
+                            }`}
+                        >
+                            Unpaid
+                        </button>
+                        <button
+                            onClick={() => setPaidAmount(grandTotal / 2)}
+                            className={`flex-1 py-1.5 text-xs font-medium rounded border ${
+                                paid > 0 && paid < grandTotal
+                                    ? 'bg-amber-100 border-amber-300 text-amber-700'
+                                    : 'bg-white border-surface-300 text-surface-600 hover:bg-surface-50'
+                            }`}
+                        >
+                            Half
+                        </button>
+                        <button
+                            onClick={() => setPaidAmount(grandTotal)}
+                            className={`flex-1 py-1.5 text-xs font-medium rounded border ${
+                                paid >= grandTotal && grandTotal > 0
+                                    ? 'bg-emerald-100 border-emerald-300 text-emerald-700'
+                                    : 'bg-white border-surface-300 text-surface-600 hover:bg-surface-50'
+                            }`}
+                        >
+                            Full
+                        </button>
                     </div>
                 </div>
             </div>

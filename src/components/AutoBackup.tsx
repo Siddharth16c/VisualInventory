@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '@/db/dexie';
+import { exportDatabaseFile } from '@/db/local/db';
 import { useAppStore } from '@/store/store';
 import { Download, X, AlertTriangle, Loader2 } from 'lucide-react';
 import { downloadBlob } from '@/utils/share';
@@ -11,23 +11,15 @@ export default function AutoBackup() {
 
     useEffect(() => {
         const checkBackup = () => {
-            // Check if user has disabled the prompt entirely
             if (localStorage.getItem('visualOS_backupDisabled') === 'true') return;
-
-            // Check snooze: don't show if within snooze window
             const snoozeUntil = localStorage.getItem('visualOS_backupSnoozeUntil');
             if (snoozeUntil && Date.now() < Number(snoozeUntil)) return;
-
             const lastBackupStr = localStorage.getItem('visualOS_lastBackupDate');
             const today = new Date().toISOString().split('T')[0];
-
-            // Show only if never backed up today
             if (!lastBackupStr || lastBackupStr !== today) {
                 setTimeout(() => setShowPrompt(true), 30000);
             }
         };
-
-        // Delay the initial check slightly when the component mounts
         const timer = setTimeout(checkBackup, 5000);
         return () => clearTimeout(timer);
     }, []);
@@ -35,36 +27,7 @@ export default function AutoBackup() {
     const handleBackup = async () => {
         setIsExporting(true);
         try {
-            const backup: Record<string, any[]> = {};
-
-            const tableNames = [
-                'items', 'products', 'prospects', 'orders', 'order_items',
-                'travel_records', 'visits', 'costs', 'account',
-                'marketing_catalogues', 'verticals', 'brands',
-                'packing_units', 'variant_params_1', 'variant_params_2', 'variant_params_3', 'bills', 'business_config',
-            ];
-
-            for (const name of tableNames) {
-                const table = (db as any)[name];
-                if (table) {
-                    backup[name] = await table.toArray();
-                }
-            }
-
-            // Handle product_media separately
-            const mediaItems = await db.product_media.toArray();
-            backup['product_media'] = await Promise.all(
-                mediaItems.map(async (m) => {
-                    const arrayBuffer = await (m.data as Blob).arrayBuffer();
-                    const base64 = btoa(
-                        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-                    );
-                    return { ...m, data: base64, _blob_encoded: true };
-                })
-            );
-
-            const json = JSON.stringify(backup, null, 2);
-            const blob = new Blob([json], { type: 'application/json' });
+            const blob = await exportDatabaseFile();
 
             // Generate filename with timestamp
             const dateStr = new Date().toISOString().split('T')[0];

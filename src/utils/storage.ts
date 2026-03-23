@@ -2,7 +2,7 @@
  * Supabase Storage utility — replaces OPFS for image uploads
  *
  * Images are stored at: `media/{firm_id}/{item_id}/{timestamp_filename.webp}`
- * The public URL is stored in product_media.storage_path
+ * The public URL is stored in item_media.storage_path
  */
 
 import { supabase } from '@/db/supabase';

@@ -49,6 +49,8 @@ export interface Vertical {
     id: number;
     firm_id: string;
     name: string;
+    sort_order?: number;
+    icon_base64?: string | null;
 }
 
 export interface Brand {
@@ -87,11 +89,14 @@ export interface Item {
     firm_id: string;
     item_name: string;
     category: string;
-    // New fields — added in Task 1 schema migration
-    keyword_id?: string | null;          // deterministic SKU identifier — barcode replacement
-    reorder_threshold: number;           // triggers restock signal when stock_parcels <= this
-    purchase_price_unit: number;         // cost price per unit for margin tracking
-    // Existing relationships
+    keyword_id?: string | null;
+    reorder_threshold: number;
+    purchase_price_unit: number;
+    // Thumbnail stored as base64 WebP (~5-10KB)
+    thumbnail_base64?: string | null;
+    // Marketing images for catalogue/sharing
+    marketing_images?: { type: 'image' | 'video'; data: string; width?: number; height?: number }[] | null;
+    // Relationships
     product_id?: number | null;
     brand_id?: number | null;
     vertical_id?: number | null;
@@ -99,11 +104,12 @@ export interface Item {
     variant_param1_id?: number | null;
     variant_param2_id?: number | null;
     variant_param3_id?: number | null;
-    // Stock formula: stock_units = p_unit × p_unit_per_parcel × stock_parcels — NEVER BREAK
+    // Stock
     p_unit: number;
     p_unit_per_parcel: number;
     stock_parcels: number;
-    stock_units: number;                 // computed/maintained value
+    stock_units: number;
+    // Pricing
     retail_price_unit: number;
     retail_price_container: number;
     wholesale_price_unit: number;
@@ -120,20 +126,8 @@ export interface ItemSearchResult {
     id: number;
     item_name: string;
     keyword_id?: string | null;
-    category: string;
     brand_id?: number | null;
     vertical_id?: number | null;
-    stock_parcels: number;
-    stock_units: number;
-    retail_price_unit: number;
-    retail_price_container: number;
-    wholesale_price_unit: number;
-    wholesale_price_container: number;
-    packaging_type?: string | null;      // "gunny bag", "brown box medium"
-    packaging_tags?: string[] | null;
-    mrp: number;
-    p_unit: number;
-    p_unit_per_parcel: number;
 }
 
 /** Filters for multi-filter billing search UI */
@@ -151,8 +145,6 @@ export interface LowStockItem {
     id: number;
     item_name: string;
     keyword_id?: string | null;
-    stock_parcels: number;
-    reorder_threshold: number;
     brand_id?: number | null;
     vertical_id?: number | null;
 }
@@ -203,6 +195,7 @@ export interface StoragePlace {
     floor_count: number;
     width_meters?: number | null;  // real-world width for accurate 3D canvas scaling
     depth_meters?: number | null;  // real-world depth
+    height_meters?: number | null; // real-world height (for 3D volume calculations)
     top_view_image_url?: string | null;  // photo/sketch of the building
     notes?: string | null;
     deleted_at?: string | null;          // soft delete
@@ -226,6 +219,10 @@ export interface StorageZone {
     zone_color?: string | null;          // hex color for 3D highlight
     notes?: string | null;
     deleted_at?: string | null;          // soft delete
+    bounding_box?: {                    // NEW: 3D Volume Detection
+      min: [number, number, number];    // [x, y, z]
+      max: [number, number, number];    // [x, y, z]
+    } | null;
 }
 
 /**
@@ -262,6 +259,12 @@ export interface ItemLocation {
     last_verified_at?: string | null;   // when staff last confirmed position
     updated_at: string;
     deleted_at?: string | null;          // soft delete
+    pos_x?: number | null;              // NEW: Global 3D X coordinate
+    pos_y?: number | null;              // NEW: Global 3D Y (Height/Stacking) coordinate
+    pos_z?: number | null;              // NEW: Global 3D Z (Depth) coordinate
+    dim_w?: number | null;              // NEW: Parcel/Stack width
+    dim_d?: number | null;              // NEW: Parcel/Stack depth
+    dim_h?: number | null;              // NEW: Parcel/Stack height
 }
 
 /** Full location path — used in billing UI to show "where is this item" */
@@ -348,10 +351,10 @@ export interface Prospect {
     business_type: string;
     route_id?: number | null;
     notes?: string | null;
-    created_at: string;
+    created_at?: string | null;
 }
 
-export interface Order {
+export interface SalesOrder {
     id: number;
     firm_id: string;
     prospect_id: number;
@@ -365,31 +368,43 @@ export interface Order {
     grand_total: number;
     paid_amount: number;
     due_amount: number;
+    credit_amount: number;
     payment_status: 'unpaid' | 'partial' | 'paid';
+    is_paid: boolean;
     due_date?: string | null;
     notes?: string | null;
+    end_of_sale?: boolean | null;
     created_at: string;
 }
 
-export interface OrderItem {
+// Backward compatibility alias
+export type Order = SalesOrder;
+
+export interface SalesOrderItem {
     id: number;
-    order_id: number;
+    sales_order_id: number;
     item_id: number;
     item_name: string;
+    item_name_SKU: string;
+    sold_units: number;
     qty: number;
     unit_price: number;
     discount: number;
     total: number;
 }
 
+// Backward compatibility alias
+export type OrderItem = SalesOrderItem;
+
 export interface Bill {
     id: number;
     firm_id: string;
-    order_id: number;
     bill_number: string;
-    business_name: string;
-    print_format: 'a4' | 'thermal' | 'rawbt';
     created_at: string;
+    prospect_id?: number | null;
+    grand_total: number;
+    paid_amount: number;
+    notes?: string | null;
 }
 
 // ─── Suppliers (global — no firm_id) ──────────────────────────────
@@ -399,33 +414,23 @@ export interface Supplier {
     name: string;
     contact?: string | null;
     address?: string | null;
-    vertical_id?: number | null;
     notes?: string | null;
-    created_at: string;
 }
 
 export interface PurchaseOrder {
     id: number;
     firm_id: string;
-    supplier_id: number;
-    order_date: string;
-    status: 'ordered' | 'received' | 'partial' | 'cancelled';
-    subtotal: number;
-    freight_cost: number;
-    packaging_cost: number;
-    total_cost: number;
-    notes?: string | null;
-    created_at: string;
+    purchase_log_id?: number | null;
+    purchase_rate: number;
 }
 
-export interface PurchaseOrderItem {
+export interface PurchaseLog {
     id: number;
-    purchase_order_id: number;
-    item_id?: number | null;
-    item_name: string;
-    qty: number;
-    purchase_price_unit: number;
-    total: number;
+    purchase_date: string;
+    supplier_id: number;
+    shipment_date?: string | null;
+    total_amount: number;
+    item_keyword: string;
 }
 
 // ─── Routes & Visits ──────────────────────────────────────────────
@@ -440,6 +445,21 @@ export interface Route {
     created_at: string;
 }
 
+export interface VariantParams1 {
+    id: number;
+    name: string;
+}
+
+export interface VariantParams2 {
+    id: number;
+    name: string;
+}
+
+export interface VariantParams3 {
+    id: number;
+    name: string;
+}
+
 export interface Visit {
     id: number;
     firm_id: string;
@@ -449,8 +469,7 @@ export interface Visit {
     outcome?: string | null;
     notes?: string | null;
     next_visit_plan?: string | null;
-    is_future_plan: boolean;
-    created_at: string;
+    reason_response?: string | null;
 }
 
 export interface TravelRecord {
@@ -465,26 +484,34 @@ export interface TravelRecord {
 
 // ─── Media ────────────────────────────────────────────────────────
 
-export interface ProductMedia {
+export interface ItemMedia {
     id: number;
     firm_id: string;
     item_id: number;
-    media_role: 'primary' | 'gallery' | 'flipbook' | 'gif' | 'video';
-    storage_path: string;
+    item_keyword?: string | null;
+    media_role: 'primary' | 'gallery' | 'video';
+    data_base64: string;  // Base64 encoded image data (watermarked & compressed)
     filename: string;
     mime_type: string;
+    file_size_kb?: number;
+    width?: number;
+    height?: number;
+    is_watermarked: boolean;
     created_at: string;
-    subcategory_id?: number | null;
 }
 
 // ─── Financials ────────────────────────────────────────────────────
 
+export interface CostType {
+    id: number;
+    cost_type_name: string;
+}
+
 export interface Cost {
     id: number;
     firm_id: string;
-    cost_type: string;
-    cost_factor_id?: number | null;
-    order_id?: number | null;
+    cost_type_id: number;
+    sales_order_id?: number | null;
     purchase_order_id?: number | null;
     amount: number;
     description?: string | null;
@@ -515,7 +542,6 @@ export interface StagnantStockItem {
     id: number;
     item_name: string;
     keyword_id?: string | null;
-    stock_parcels: number;
     updated_at: string;
     vertical_id?: number | null;
     brand_id?: number | null;
@@ -569,20 +595,107 @@ export interface ItemFullChain {
     firm_id: string;
     item_name: string;
     keyword_id?: string | null;
-    stock_parcels: number;
-    stock_units: number;
-    retail_price_unit: number;
-    retail_price_container: number;
-    wholesale_price_unit: number;
-    wholesale_price_container: number;
-    mrp: number;
-    reorder_threshold: number;
     product_id?: number | null;
     product_name?: string | null;
-    subcategory_id?: number | null;
-    subcategory_name?: string | null;   // COALESCE(item subcat, product subcat)
     vertical_id?: number | null;
     vertical_name?: string | null;
     brand_id?: number | null;
     brand_name?: string | null;
+}
+
+
+// --- Storage Packages (Packaging System) -------------------------------------
+
+// export type PackageType = 
+//     | 'gunny_bag' 
+//     | 'cardboard_box' 
+//     | 'carry_bag' 
+//     | 'open_tying' 
+//     | 'crate' 
+//     | 'sack' 
+//     | 'polythene_bundle' 
+//     | 'other';
+
+export interface StoragePackage {
+    id: number;
+    firm_id: string;
+    zone_id?: number | null;
+    slot_id?: number | null;
+    package_type: PackageType;
+    package_label?: string | null;
+    description?: string | null;
+    vertical_id?: number | null;
+    created_at: string;
+    deleted_at?: string | null;
+}
+
+export interface PackageItem {
+    id: number;
+    package_id: number;
+    item_id: number;
+    parcel_count: number;
+    unit_count?: number | null;
+    location_id?: number | null;
+    notes?: string | null;
+    created_at: string;
+    // Joined fields
+    item_name?: string;
+    brand_name?: string;
+    retail_price_unit?: number;
+}
+
+// ─── NEW: Stock & Pricing Tables ───────────────────────────────────
+
+export interface Category {
+    id: number;
+    name: string;
+}
+
+export interface StockDetails {
+    id: number;
+    item_id: number;
+    unit_multiplier_name: string;
+    unit_multiplier: number;
+    pack_multiplier: number;
+    retail_unit_price: number;
+    wholesale_unit_price: number;
+    stock_type: boolean;
+    parcel_id?: number | null;
+    last_updated: string;
+}
+
+export interface TotalStock {
+    id: number;
+    item_keyword: string;
+    total_units: number;
+    updated_at: string;
+}
+
+export interface ParcelingDetails {
+    id: number;
+    packaging_type: string;
+    location?: string | null;
+}
+
+export interface WarehouseLayout {
+    id: number;
+    firm_id: string;
+    name: string;
+    floors: number;
+    sections_per_floor: number;
+    rows_per_section: number;
+    cols_per_row: number;
+    created_at: string;
+}
+
+export interface WarehouseCell {
+    id: number;
+    warehouse_id: number;
+    floor: number;
+    section: string;
+    row_num: number;
+    col_num: number;
+    item_id?: number | null;
+    parcel_count: number;
+    notes?: string | null;
 }

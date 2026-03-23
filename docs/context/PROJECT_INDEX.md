@@ -4,8 +4,7 @@
 > This is the **single indexed reference** for any AI model or developer joining the project.
 > Read this first. Then read CURRENT_STATE.md for what's in progress.
 
----
-
+-
 ## 1 — What This App Does (Functional)
 
 Multi-tenant inventory management system for a small trading business (stationery, cutlery, fireworks, FMCG). 3 firms share one Supabase instance. Features: billing, stock tracking, warehouse visualization, supplier management, field operations (visit planning), analytics, media management, and a full DB editor UI.
@@ -118,28 +117,28 @@ stock_units = p_unit × p_unit_per_parcel × stock_parcels
 | `supabase.ts` | ~20 | Supabase client init with env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) |
 
 ### 5.2 Pages (`src/pages/`) — 20 files
-| File | Lines | Functional Purpose | Data Source | Status |
-|------|-------|-------------------|-------------|--------|
-| `Billing.tsx` | 777 | Order creation, cart, stock deduction, print/share, unpaid tracking | DAL (Supabase) | ✅ Migrated. Needs: server search, atomic stock, hotkeys (T7b) |
-| `DBEditor.tsx` | 845 | Excel-like CRUD grid for all tables + SQL query constructor + named controls | DAL (Supabase) | ✅ Working. Has: location tables, subcategories, query panel |
-| `Accounting.tsx` | 300 | Monthly revenue/costs/profit, cost entry CRUD | DAL (Supabase) | ✅ Migrated |
-| `Marketing.tsx` | 400 | Price list + catalogue PDF generation | DAL (Supabase) | ✅ Migrated |
-| `Media.tsx` | 440 | Image upload/compress, GIF gen, watermark, text overlay | Hybrid: items from DAL, blobs from Dexie | ⚠️ Partial migration |
-| `Suppliers.tsx` | 600 | Supplier CRUD, purchase orders, business volume charts | DAL (Supabase) | ✅ Working |
-| `Warehouse.tsx` | 600 | 3D warehouse viz, cell assignment, item search | DAL (Supabase) | ✅ Working |
-| `FieldOps.tsx` | 800 | Visit planning, route management, prospect visits | DAL (Supabase) | ✅ Working |
-| `Analytics.tsx` | 500 | D3 hierarchy viz, brand metrics, account flow | DAL (Supabase) | ✅ Working |
-| `Reports.tsx` | 80 | Tab container for report sub-pages | Mixed | ⚠️ KPI tab uses Dexie |
-| `Inventory.tsx` | 900 | Legacy inventory page (may be superseded by DBEditor) | Dexie | ❌ Still on Dexie |
-| `Catalogue.tsx` | 450 | Catalogue view/generation | Dexie | ❌ Still on Dexie |
-| `PriceList.tsx` | 400 | Price list view | Dexie | ❌ Still on Dexie |
-| `Dashboard.tsx` | 200 | Overview dashboard | Dexie | ❌ Still on Dexie |
-| `Prospects.tsx` | 200 | Customer management (basic) | Dexie | ❌ Still on Dexie |
-| `Routes.tsx` | 500 | Route management (separate from FieldOps) | Mixed | ⚠️ Partially |
-| `Settings.tsx` | 70 | Settings placeholder | — | Stub |
-| `SplitViewer.tsx` | 150 | Split-screen comparison view | — | Working |
-| `Maintenance.tsx` | 370 | Backup/restore utilities | Dexie | ❌ Still on Dexie |
-| `ReportDownloads.tsx` | 600 | Report export (PDF/CSV) | DAL | ✅ Working |
+| File                  | Lines | Functional Purpose                                                           | Data Source                              | Status                                                        |
+| --------------------- | ----- | ---------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
+| `Billing.tsx`         | 777   | Order creation, cart, stock deduction, print/share, unpaid tracking          | DAL (Supabase)                           | ✅ Migrated. Needs: server search, atomic stock, hotkeys (T7b) |
+| `DBEditor.tsx`        | 845   | Excel-like CRUD grid for all tables + SQL query constructor + named controls | DAL (Supabase)                           | ✅ Working. Has: location tables, subcategories, query panel   |
+| `Accounting.tsx`      | 300   | Monthly revenue/costs/profit, cost entry CRUD                                | DAL (Supabase)                           | ✅ Migrated                                                    |
+| `Marketing.tsx`       | 400   | Price list + catalogue PDF generation                                        | DAL (Supabase)                           | ✅ Migrated                                                    |
+| `Media.tsx`           | 440   | Image upload/compress, GIF gen, watermark, text overlay                      | Hybrid: items from DAL, blobs from Dexie | ⚠️ Partial migration                                          |
+| `Suppliers.tsx`       | 600   | Supplier CRUD, purchase orders, business volume charts                       | DAL (Supabase)                           | ✅ Working                                                     |
+| `Warehouse.tsx`       | 600   | 3D warehouse viz, cell assignment, item search                               | DAL (Supabase)                           | ✅ Working                                                     |
+| `FieldOps.tsx`        | 800   | Visit planning, route management, prospect visits                            | DAL (Supabase)                           | ✅ Working                                                     |
+| `Analytics.tsx`       | 500   | D3 hierarchy viz, brand metrics, account flow                                | DAL (Supabase)                           | ✅ Working                                                     |
+| `Reports.tsx`         | 80    | Tab container for report sub-pages                                           | Mixed                                    | ⚠️ KPI tab uses Dexie                                         |
+| `Inventory.tsx`       | 900   | Legacy inventory page (may be superseded by DBEditor)                        | Dexie                                    | ❌ Still on Dexie                                              |
+| `Catalogue.tsx`       | 450   | Catalogue view/generation                                                    | Dexie                                    | ❌ Still on Dexie                                              |
+| `PriceList.tsx`       | 400   | Price list view                                                              | Dexie                                    | ❌ Still on Dexie                                              |
+| `Dashboard.tsx`       | 200   | Overview dashboard                                                           | Dexie                                    | ❌ Still on Dexie                                              |
+| `Prospects.tsx`       | 200   | Customer management (basic)                                                  | Dexie                                    | ❌ Still on Dexie                                              |
+| `Routes.tsx`          | 500   | Route management (separate from FieldOps)                                    | Mixed                                    | ⚠️ Partially                                                  |
+| `Settings.tsx`        | 70    | Settings placeholder                                                         | —                                        | Stub                                                          |
+| `SplitViewer.tsx`     | 150   | Split-screen comparison view                                                 | —                                        | Working                                                       |
+| `Maintenance.tsx`     | 370   | Backup/restore utilities                                                     | Dexie                                    | ❌ Still on Dexie                                              |
+| `ReportDownloads.tsx` | 600   | Report export (PDF/CSV)                                                      | DAL                                      | ✅ Working                                                     |
 
 ### 5.3 Components (`src/components/`)
 | File | Purpose |
