@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { DAL } from '@/db/dal';
 import { useAppStore } from '@/store/store';
 import {
@@ -9,20 +8,14 @@ import {
     getFeaturesByCategory,
     type FeatureFlag
 } from '@/config/featuresConfig';
-import { clearAdminToken } from '@/config/adminAuth';
 import {
     ShieldCheck,
     Building2,
     ToggleLeft,
     ToggleRight,
     RefreshCw,
-    Save,
-    CheckCircle,
-    XCircle,
-    Users,
-    LogOut
+    Save
 } from 'lucide-react';
-import { AdminLogout } from '@/components/AdminLogout';
 
 interface Firm {
     id: string;
@@ -107,7 +100,7 @@ export default function AdminFeaturePanel() {
         setHasChanges(true);
     };
 
-    const handleSave = () => {
+    const handleSaveFeatures = () => {
         if (selectedFirmId) {
             updateMutation.mutate({ firmId: selectedFirmId, features: editedFeatures });
         }
@@ -125,39 +118,27 @@ export default function AdminFeaturePanel() {
 
     return (
         <div className="max-w-6xl mx-auto space-y-6">
-            {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <div className="p-2 rounded-lg bg-surface-900">
                         <ShieldCheck className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                        <h1 className="text-xl font-bold text-surface-900">Feature Management</h1>
-                        <p className="text-sm text-surface-500">Control feature access for each firm</p>
+                        <h1 className="text-xl font-bold text-surface-900">Admin Panel</h1>
+                        <p className="text-sm text-surface-500">Manage features per firm</p>
                     </div>
                 </div>
-                {hasChanges && (
-                    <button
-                        onClick={handleSave}
-                        disabled={updateMutation.isPending}
-                        className="flex items-center gap-2 px-4 py-2 bg-surface-900 text-white rounded-lg hover:bg-surface-700 disabled:opacity-50"
-                    >
-                        <Save className="h-4 w-4" />
-                        {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-                    </button>
-                )}
             </div>
 
-            {/* Firm Selector */}
-            <div className="bg-white rounded-xl border border-surface-200 p-4">
-                <label className="block text-sm font-medium text-surface-700 mb-2">
-                    Select Firm
-                </label>
-                <div className="flex gap-4">
+            <div className="flex items-center justify-between">
+                <div className="bg-white rounded-xl border border-surface-200 p-4 flex-1">
+                    <label className="block text-sm font-medium text-surface-700 mb-2">
+                        Select Firm
+                    </label>
                     <select
                         value={selectedFirmId || ''}
                         onChange={(e) => setSelectedFirmId(e.target.value)}
-                        className="flex-1 px-3 py-2 border text-surface-600 border-surface-300 rounded-lg focus:ring-2 focus:ring-surface-900 focus:border-transparent"
+                        className="w-full px-3 py-2 border text-surface-600 border-surface-300 rounded-lg focus:ring-2 focus:ring-surface-900 focus:border-transparent"
                     >
                         {firms.map(firm => (
                             <option key={firm.id} value={firm.id}>
@@ -166,19 +147,20 @@ export default function AdminFeaturePanel() {
                         ))}
                     </select>
                 </div>
-                {selectedFirm && (
-                    <div className="mt-3 flex gap-4 text-xs text-surface-500">
-                        {selectedFirm.address && <span>Address: {selectedFirm.address}</span>}
-                        {selectedFirm.contact && <span>Contact: {selectedFirm.contact}</span>}
-                        {selectedFirm.email && <span>Email: {selectedFirm.email}</span>}
-                    </div>
+                {hasChanges && (
+                    <button
+                        onClick={handleSaveFeatures}
+                        disabled={updateMutation.isPending}
+                        className="ml-4 flex items-center gap-2 px-4 py-2 bg-surface-900 text-white rounded-lg hover:bg-surface-700 disabled:opacity-50"
+                    >
+                        <Save className="h-4 w-4" />
+                        {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+                    </button>
                 )}
             </div>
 
-            {/* Feature Matrix */}
             {selectedFirm && (
                 <div className="space-y-4">
-                    {/* Quick Actions */}
                     <div className="flex gap-2">
                         <button
                             onClick={enableAllFeatures}
@@ -203,7 +185,6 @@ export default function AdminFeaturePanel() {
                         </button>
                     </div>
 
-                    {/* Categories */}
                     {Object.entries(featuresByCategory).map(([category, features]) => (
                         <div key={category} className="bg-white rounded-xl border border-surface-200 overflow-hidden">
                             <div className="px-4 py-3 bg-surface-50 border-b border-surface-200">
@@ -217,8 +198,7 @@ export default function AdminFeaturePanel() {
                                     return (
                                         <div
                                             key={feature.key}
-                                            className={`flex items-center justify-between px-4 py-3 ${isDisabled ? 'bg-surface-50 opacity-60' : 'hover:bg-surface-50'
-                                                }`}
+                                            className={`flex items-center justify-between px-4 py-3 ${isDisabled ? 'bg-surface-50 opacity-60' : 'hover:bg-surface-50'}`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 <feature.icon className="h-5 w-5 text-surface-500" />
@@ -244,8 +224,7 @@ export default function AdminFeaturePanel() {
                                             <button
                                                 onClick={() => !isDisabled && toggleFeature(feature.key)}
                                                 disabled={isDisabled}
-                                                className={`p-1 rounded transition-colors ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'
-                                                    }`}
+                                                className={`p-1 rounded transition-colors ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                                             >
                                                 {isEnabled ? (
                                                     <ToggleRight className="h-7 w-7 text-emerald-500" />
@@ -262,7 +241,6 @@ export default function AdminFeaturePanel() {
                 </div>
             )}
 
-            {/* Firm Overview Cards */}
             <div className="bg-white rounded-xl border border-surface-200 overflow-hidden">
                 <div className="px-4 py-3 bg-surface-50 border-b border-surface-200">
                     <h3 className="text-sm font-semibold text-surface-900">All Firms Overview</h3>
@@ -276,10 +254,11 @@ export default function AdminFeaturePanel() {
                         return (
                             <div
                                 key={firm.id}
-                                className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${selectedFirmId === firm.id
-                                    ? 'border-surface-900 bg-surface-50'
-                                    : 'border-surface-200 hover:border-surface-300'
-                                    }`}
+                                className={`p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                                    selectedFirmId === firm.id
+                                        ? 'border-surface-900 bg-surface-50'
+                                        : 'border-surface-200 hover:border-surface-300'
+                                }`}
                                 onClick={() => setSelectedFirmId(firm.id)}
                             >
                                 <div className="flex items-center gap-2 mb-2">

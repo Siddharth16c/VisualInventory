@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Item, Prospect } from '@/db/dexie';
+import type { Item, Prospect } from '@/db/types';
 import type { FeatureFlag } from '@/config/featuresConfig';
 
 // ─── Cart Slice ─────────────────────────────────────────────────
@@ -71,6 +71,7 @@ interface UISlice {
     userRole: string;
     firmId: string | null;
     enabledFeatures: Record<FeatureFlag, boolean> | null;
+    isLoggedIn: boolean;
 
     toggleSidebar: () => void;
     setSidebarOpen: (open: boolean) => void;
@@ -82,6 +83,7 @@ interface UISlice {
     setUserRole: (role: string) => void;
     setFirmId: (firmId: string | null) => void;
     setEnabledFeatures: (features: Record<FeatureFlag, boolean> | null) => void;
+    setLoggedIn: (loggedIn: boolean) => void;
 }
 
 // ─── Media Slice ────────────────────────────────────────────────
@@ -257,6 +259,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     userRole: 'master_admin',
     firmId: null,
     enabledFeatures: null,
+    isLoggedIn: false,
 
     toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
     setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -275,6 +278,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     setUserRole: (role) => set({ userRole: role }),
     setFirmId: (firmId) => set({ firmId }),
     setEnabledFeatures: (features) => set({ enabledFeatures: features }),
+    setLoggedIn: (loggedIn) => set({ isLoggedIn: loggedIn }),
 
     // ── Media State ─────────────────────────────────────────────
     ffmpegProgress: 0,

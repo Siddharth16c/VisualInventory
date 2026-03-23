@@ -130,7 +130,7 @@ export default function Marketing() {
 
             const catalogueItems: CatalogueItem[] = await Promise.all(filteredItems.map(async (item: any) => {
                 let media: any[] = [];
-                try { media = await DAL.product_media.getByItem(item.id!); } catch { /* no media */ }
+                try { media = await DAL.item_media.getByItem(item.id!); } catch { /* no media */ }
                 const vert = verticals.find((v: any) => v.id === item.vertical_id);
                 const brand = brands.find((b: any) => b.id === item.brand_id);
                 const product = products.find((p: any) => p.id === item.product_id);

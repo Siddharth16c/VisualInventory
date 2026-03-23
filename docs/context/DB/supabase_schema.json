@@ -1,0 +1,637 @@
+
+
+
+[
+  {
+    "type": "POLICY",
+    "name": "account",
+    "definition": "owner_only_account (ALL): ((firm_id = get_my_firm_id()) AND (EXISTS ( SELECT 1\n   FROM firm_users\n  WHERE ((firm_users.user_id = auth.uid()) AND (firm_users.role = 'master_admin'::text)))))"
+  },
+  {
+    "type": "POLICY",
+    "name": "account",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "bills",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "brands",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "brands",
+    "definition": "firm_all_brands (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "costs",
+    "definition": "owner_only_costs (ALL): ((firm_id = get_my_firm_id()) AND (EXISTS ( SELECT 1\n   FROM firm_users\n  WHERE ((firm_users.user_id = auth.uid()) AND (firm_users.role = 'master_admin'::text)))))"
+  },
+  {
+    "type": "POLICY",
+    "name": "costs",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "item_locations",
+    "definition": "firm_all_item_locations (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "item_locations",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "items",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "items",
+    "definition": "firm_read_items (SELECT): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "items",
+    "definition": "firm_write_items (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "marketing_catalogues",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "order_items",
+    "definition": "firm_order_items (ALL): (EXISTS ( SELECT 1\n   FROM orders o\n  WHERE ((o.id = order_items.order_id) AND (o.firm_id = get_my_firm_id()))))"
+  },
+  {
+    "type": "POLICY",
+    "name": "order_items",
+    "definition": "firm_isolation (ALL): (order_id IN ( SELECT orders.id\n   FROM orders\n  WHERE (orders.firm_id = get_my_firm_id())))"
+  },
+  {
+    "type": "POLICY",
+    "name": "orders",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "orders",
+    "definition": "firm_all_orders (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "packing_units",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "product_media",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "products",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "prospects",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "prospects",
+    "definition": "firm_all_prospects (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "purchase_order_items",
+    "definition": "firm_isolation (ALL): (purchase_order_id IN ( SELECT purchase_orders.id\n   FROM purchase_orders\n  WHERE (purchase_orders.firm_id = get_my_firm_id())))"
+  },
+  {
+    "type": "POLICY",
+    "name": "purchase_orders",
+    "definition": "firm_all_purchase_orders (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "purchase_orders",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "routes",
+    "definition": "firm_all_routes (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "routes",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "stock_movements",
+    "definition": "owner_update_movements (UPDATE): ((firm_id = get_my_firm_id()) AND (EXISTS ( SELECT 1\n   FROM firm_users\n  WHERE ((firm_users.user_id = auth.uid()) AND (firm_users.role = ANY (ARRAY['master_admin'::text, 'store_owner'::text]))))))"
+  },
+  {
+    "type": "POLICY",
+    "name": "stock_movements",
+    "definition": "firm_insert_movements (INSERT): true"
+  },
+  {
+    "type": "POLICY",
+    "name": "stock_movements",
+    "definition": "firm_read_movements (SELECT): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "storage_places",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "storage_places",
+    "definition": "firm_all_places (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "storage_slots",
+    "definition": "firm_all_slots (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "storage_slots",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "storage_zones",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "storage_zones",
+    "definition": "firm_all_zones (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "subcategories",
+    "definition": "subcategories_update (UPDATE): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "subcategories",
+    "definition": "subcategories_delete (DELETE): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "subcategories",
+    "definition": "subcategories_select (SELECT): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "subcategories",
+    "definition": "subcategories_insert (INSERT): true"
+  },
+  {
+    "type": "POLICY",
+    "name": "suppliers",
+    "definition": "authenticated_read (SELECT): (auth.uid() IS NOT NULL)"
+  },
+  {
+    "type": "POLICY",
+    "name": "suppliers",
+    "definition": "authenticated_write (ALL): (auth.uid() IS NOT NULL)"
+  },
+  {
+    "type": "POLICY",
+    "name": "travel_records",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "variant_params_1",
+    "definition": "firm_or_global (ALL): ((firm_id IS NULL) OR (firm_id = get_my_firm_id()))"
+  },
+  {
+    "type": "POLICY",
+    "name": "variant_params_2",
+    "definition": "firm_or_global (ALL): ((firm_id IS NULL) OR (firm_id = get_my_firm_id()))"
+  },
+  {
+    "type": "POLICY",
+    "name": "variant_params_3",
+    "definition": "firm_or_global (ALL): ((firm_id IS NULL) OR (firm_id = get_my_firm_id()))"
+  },
+  {
+    "type": "POLICY",
+    "name": "verticals",
+    "definition": "firm_all_verticals (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "verticals",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "visits",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "POLICY",
+    "name": "warehouse_cells",
+    "definition": "firm_isolation (ALL): (warehouse_id IN ( SELECT warehouse_layout.id\n   FROM warehouse_layout\n  WHERE (warehouse_layout.firm_id = get_my_firm_id())))"
+  },
+  {
+    "type": "POLICY",
+    "name": "warehouse_layout",
+    "definition": "firm_isolation (ALL): (firm_id = get_my_firm_id())"
+  },
+  {
+    "type": "TABLE",
+    "name": "account",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nmonth_year text NOT NULL\ntotal_revenue numeric NOT NULL\ntotal_cost numeric NOT NULL\nprofit numeric NOT NULL\nnotes text"
+  },
+  {
+    "type": "TABLE",
+    "name": "bills",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\norder_id bigint NOT NULL\nbill_number text NOT NULL\nbusiness_name text NOT NULL\nprint_format text NOT NULL\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "brands",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nvertical_id bigint\nname text NOT NULL"
+  },
+  {
+    "type": "TABLE",
+    "name": "costs",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\ncost_type text NOT NULL\ncost_factor_id bigint\norder_id bigint\npurchase_order_id bigint\namount numeric NOT NULL\ndescription text\ndate date NOT NULL"
+  },
+  {
+    "type": "TABLE",
+    "name": "firm_users",
+    "definition": "id uuid NOT NULL\nuser_id uuid NOT NULL\nfirm_id uuid NOT NULL\nrole text NOT NULL\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "firms",
+    "definition": "id uuid NOT NULL\nname text NOT NULL\nslug text NOT NULL\naddress text\ngstin text\ncontact text\nemail text\nwebsite text\nenabled_features jsonb\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "item_locations",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nitem_id bigint NOT NULL\nslot_id bigint NOT NULL\nparcel_count integer NOT NULL\nis_primary boolean\nlast_verified_at timestamp with time zone\nupdated_at timestamp with time zone\ndeleted_at timestamp with time zone\npackaging_type text\npackaging_tags ARRAY"
+  },
+  {
+    "type": "TABLE",
+    "name": "items",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nitem_name text NOT NULL\ncategory text NOT NULL\nproduct_id bigint\nbrand_id bigint\nvertical_id bigint\npacking_unit_id bigint\nvariant_param1_id bigint\nvariant_param2_id bigint\nvariant_param3_id bigint\np_unit integer NOT NULL\np_unit_per_parcel integer NOT NULL\nstock_parcels integer NOT NULL\nstock_units integer NOT NULL\nretail_price_unit numeric NOT NULL\nretail_price_container numeric NOT NULL\nwholesale_price_unit numeric NOT NULL\nwholesale_price_container numeric NOT NULL\nmrp numeric NOT NULL\nmetadata jsonb\ncreated_at timestamp with time zone\nupdated_at timestamp with time zone\nkeyword_id text\nsubcategory_id bigint\nreorder_threshold integer NOT NULL\npurchase_price_unit numeric NOT NULL\ntsvector_search tsvector"
+  },
+  {
+    "type": "TABLE",
+    "name": "marketing_catalogues",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\ntitle text NOT NULL\nitem_ids jsonb\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "order_items",
+    "definition": "id bigint NOT NULL\norder_id bigint NOT NULL\nitem_id bigint NOT NULL\nitem_name text NOT NULL\nqty integer NOT NULL\nunit_price numeric NOT NULL\ndiscount numeric NOT NULL\ntotal numeric NOT NULL"
+  },
+  {
+    "type": "TABLE",
+    "name": "orders",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nprospect_id bigint NOT NULL\nprospect_name text NOT NULL\norder_date date NOT NULL\npricing_mode text NOT NULL\nstatus text NOT NULL\nsubtotal numeric\ntax_amount numeric\ndiscount_amount numeric\ngrand_total numeric\npaid_amount numeric\ndue_amount numeric\npayment_status text NOT NULL\ndue_date date\nnotes text\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "packing_units",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nunit_name text NOT NULL\nmultiplier integer NOT NULL"
+  },
+  {
+    "type": "TABLE",
+    "name": "product_media",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nitem_id bigint NOT NULL\nmedia_role text NOT NULL\nstorage_path text NOT NULL\nfilename text NOT NULL\nmime_type text NOT NULL\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "products",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nvertical_id bigint\nname text NOT NULL\ncategory text NOT NULL\nsubcategory_id bigint"
+  },
+  {
+    "type": "TABLE",
+    "name": "prospects",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nprospectname text NOT NULL\narea_town text NOT NULL\ncontact text NOT NULL\nbusiness_type text NOT NULL\nroute_id bigint\nnotes text\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "purchase_order_items",
+    "definition": "id bigint NOT NULL\npurchase_order_id bigint NOT NULL\nitem_id bigint\nitem_name text NOT NULL\nqty integer NOT NULL\npurchase_price_unit numeric NOT NULL\ntotal numeric NOT NULL"
+  },
+  {
+    "type": "TABLE",
+    "name": "purchase_orders",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nsupplier_id bigint NOT NULL\norder_date date NOT NULL\nstatus text NOT NULL\nsubtotal numeric\nfreight_cost numeric\npackaging_cost numeric\ntotal_cost numeric\nnotes text\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "routes",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nname text NOT NULL\ndescription text\narea_towns ARRAY\ncolor_tag text\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "stock_movements",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nitem_id bigint NOT NULL\nmovement_type text NOT NULL\nqty_change integer NOT NULL\nparcel_change integer\nfrom_location_id bigint\nto_location_id bigint\norder_id bigint\npurchase_order_id bigint\nnotes text\ncreated_at timestamp with time zone\ncreated_by uuid"
+  },
+  {
+    "type": "TABLE",
+    "name": "storage_places",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nplace_name text NOT NULL\nplace_slug text NOT NULL\nplace_type text NOT NULL\nfloor_count integer NOT NULL\nsvg_layout_path text\nnotes text\ncreated_at timestamp with time zone\ndeleted_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "storage_slots",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nzone_id bigint NOT NULL\nslot_name text NOT NULL\nslot_label text\ncapacity_parcels integer\nnotes text\ndeleted_at timestamp with time zone\norder_index integer"
+  },
+  {
+    "type": "TABLE",
+    "name": "storage_zones",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nplace_id bigint NOT NULL\nfloor_num integer NOT NULL\nzone_name text NOT NULL\nzone_slug text NOT NULL\nzone_label text\nnotes text\ndeleted_at timestamp with time zone\npolygon_coords jsonb\nzone_color text"
+  },
+  {
+    "type": "TABLE",
+    "name": "subcategories",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nvertical_id bigint\nname text NOT NULL\nslug text\ndescription text\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "suppliers",
+    "definition": "id bigint NOT NULL\nname text NOT NULL\ncontact text\naddress text\nvertical_id bigint\nnotes text\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "travel_records",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\ntravel_date date NOT NULL\nroute_id bigint\nroute_name text\nis_ideal boolean NOT NULL\nnotes text"
+  },
+  {
+    "type": "TABLE",
+    "name": "variant_params_1",
+    "definition": "id bigint NOT NULL\nfirm_id uuid\nproduct_id bigint\nname text NOT NULL"
+  },
+  {
+    "type": "TABLE",
+    "name": "variant_params_2",
+    "definition": "id bigint NOT NULL\nfirm_id uuid\nproduct_id bigint\nname text NOT NULL"
+  },
+  {
+    "type": "TABLE",
+    "name": "variant_params_3",
+    "definition": "id bigint NOT NULL\nfirm_id uuid\nproduct_id bigint\nname text NOT NULL"
+  },
+  {
+    "type": "TABLE",
+    "name": "verticals",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nname text NOT NULL"
+  },
+  {
+    "type": "TABLE",
+    "name": "visits",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nprospect_id bigint NOT NULL\nroute_id bigint\nvisit_date date NOT NULL\noutcome text\nnotes text\nnext_visit_plan date\nis_future_plan boolean\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TABLE",
+    "name": "warehouse_cells",
+    "definition": "id bigint NOT NULL\nwarehouse_id bigint NOT NULL\nfloor integer NOT NULL\nsection text NOT NULL\nrow_num integer NOT NULL\ncol_num integer NOT NULL\nitem_id bigint\nparcel_count integer NOT NULL\nnotes text"
+  },
+  {
+    "type": "TABLE",
+    "name": "warehouse_layout",
+    "definition": "id bigint NOT NULL\nfirm_id uuid NOT NULL\nname text NOT NULL\nfloors integer NOT NULL\nsections_per_floor integer NOT NULL\nrows_per_section integer NOT NULL\ncols_per_row integer NOT NULL\ncreated_at timestamp with time zone"
+  },
+  {
+    "type": "TRIGGER",
+    "name": "items",
+    "definition": "set_keyword_id BEFORE INSERT EXECUTE EXECUTE FUNCTION generate_keyword_id()"
+  },
+  {
+    "type": "TRIGGER",
+    "name": "storage_slots",
+    "definition": "trg_slot_label BEFORE INSERT EXECUTE EXECUTE FUNCTION set_slot_label()"
+  },
+  {
+    "type": "TRIGGER",
+    "name": "storage_slots",
+    "definition": "trg_slot_label BEFORE UPDATE EXECUTE EXECUTE FUNCTION set_slot_label()"
+  },
+  {
+    "type": "TRIGGER",
+    "name": "storage_zones",
+    "definition": "trg_zone_label BEFORE INSERT EXECUTE EXECUTE FUNCTION set_zone_label()"
+  },
+  {
+    "type": "TRIGGER",
+    "name": "storage_zones",
+    "definition": "trg_cascade_zone_to_slots AFTER UPDATE EXECUTE EXECUTE FUNCTION cascade_zone_label_to_slots()"
+  },
+  {
+    "type": "TRIGGER",
+    "name": "storage_zones",
+    "definition": "trg_zone_label BEFORE UPDATE EXECUTE EXECUTE FUNCTION set_zone_label()"
+  },
+  {
+    "type": "TRIGGER",
+    "name": "subcategories",
+    "definition": "set_subcategory_slug BEFORE INSERT EXECUTE EXECUTE FUNCTION generate_subcategory_slug()"
+  },
+  {
+    "type": "TRIGGER",
+    "name": "subcategories",
+    "definition": "set_subcategory_slug BEFORE UPDATE EXECUTE EXECUTE FUNCTION generate_subcategory_slug()"
+  },
+
+  [
+      {
+        "schemaname": "public",
+        "table_name": "global_tables_config",
+        "row_count": 8
+      },
+      {
+        "schemaname": "public",
+        "table_name": "variant_params_2",
+        "row_count": 6
+      },
+      {
+        "schemaname": "public",
+        "table_name": "variant_params_1",
+        "row_count": 5
+      },
+      {
+        "schemaname": "public",
+        "table_name": "storage_zones",
+        "row_count": 5
+      },
+      {
+        "schemaname": "public",
+        "table_name": "brands",
+        "row_count": 5
+      },
+      {
+        "schemaname": "public",
+        "table_name": "firms",
+        "row_count": 4
+      },
+      {
+        "schemaname": "public",
+        "table_name": "variant_params_3",
+        "row_count": 4
+      },
+      {
+        "schemaname": "public",
+        "table_name": "firm_users",
+        "row_count": 2
+      },
+      {
+        "schemaname": "public",
+        "table_name": "prospects",
+        "row_count": 2
+      },
+      {
+        "schemaname": "public",
+        "table_name": "storage_places",
+        "row_count": 2
+      },
+      {
+        "schemaname": "public",
+        "table_name": "products",
+        "row_count": 1
+      },
+      {
+        "schemaname": "public",
+        "table_name": "items",
+        "row_count": 1
+      },
+      {
+        "schemaname": "public",
+        "table_name": "routes",
+        "row_count": 1
+      },
+      {
+        "schemaname": "public",
+        "table_name": "verticals",
+        "row_count": 1
+      },
+      {
+        "schemaname": "public",
+        "table_name": "packing_units",
+        "row_count": 1
+      },
+      {
+        "schemaname": "public",
+        "table_name": "visits",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "travel_records",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "suppliers",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "purchase_orders",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "purchase_order_items",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "product_media",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "costs",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "account",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "marketing_catalogues",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "warehouse_layout",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "warehouse_cells",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "stock_movements",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "orders",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "package_items",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "storage_slots",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "item_locations",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "subcategories",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "storage_packages",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "order_items",
+        "row_count": 0
+      },
+      {
+        "schemaname": "public",
+        "table_name": "bills",
+        "row_count": 0
+      }
+]]

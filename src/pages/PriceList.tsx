@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Item, type PackingUnit } from '@/db/dexie';
+import { useLiveQuery } from '@/db/local/hooks';
+import * as db from '@/db/local/queries';
+import { DAL, getFirmId } from '@/db/dal';
+import type { Item, PackingUnit } from '@/db/types';
 import { useAppStore } from '@/store/store';
 import { jsPDF } from 'jspdf';
 import { shareFile } from '@/utils/share';
@@ -10,11 +12,11 @@ type PriceMode = 'lean' | 'bulk';
 
 
 export default function PriceList() {
-    const items = useLiveQuery(() => db.items.toArray()) || [];
-    const allBrands = useLiveQuery(() => db.brands.toArray()) || [];
-    const allProducts = useLiveQuery(() => db.products.toArray()) || [];
-    const packingUnits = useLiveQuery(() => db.packing_units.toArray()) || [];
-    const allVP1 = useLiveQuery(() => db.variant_params_1.toArray()) || [];
+    const items = useLiveQuery(() => db.getItems(getFirmId())) || [];
+    const allBrands = useLiveQuery(() => db.getBrands()) || [];
+    const allProducts = useLiveQuery(() => DAL.products.getAll()) || [];
+    const packingUnits = useLiveQuery(() => db.getPackingUnits()) || [];
+    const allVP1 = useLiveQuery(() => DAL.variant_params_1.getAll()) || [];
     const addToast = useAppStore((s) => s.addToast);
     const activeBusiness = useAppStore((s) => s.activeBusiness);
 
@@ -157,7 +159,7 @@ export default function PriceList() {
                 const variant = item.variant_param1_id ? vp1Map.get(item.variant_param1_id) || '-' : '-';
                 const unitP = getUnitPrice(item);
                 const containerP = getContainerPrice(item);
-                const parcelP = containerP * item.P_unit_per_parcel;
+                const parcelP = containerP * item.p_unit_per_parcel;
 
                 // Alternate row shading
                 if (idx % 2 === 0) {
@@ -170,7 +172,7 @@ export default function PriceList() {
                 doc.text(variant.substring(0, 12), 100, y);
                 doc.text(`Rs.${unitP.toFixed(2)}`, 128, y);
                 doc.text(`Rs.${containerP.toFixed(2)}`, 155, y);
-                doc.text(`${item.p_unit} x ${item.P_unit_per_parcel}`, 180, y);
+                doc.text(`${item.p_unit} x ${item.p_unit_per_parcel}`, 180, y);
                 y += 7;
             });
 
@@ -290,7 +292,7 @@ export default function PriceList() {
                                         <p className="text-xs text-surface-400">
                                             {item.variant_param1_id && `${vp1Map.get(item.variant_param1_id) || ''} · `}
                                             {brand && `${brand} · `}
-                                            {puName && `${item.p_unit}x${item.P_unit_per_parcel} ${puName}`}
+                                            {puName && `${item.p_unit}x${item.p_unit_per_parcel} ${puName}`}
                                         </p>
                                     </div>
                                     <div className="text-right text-xs flex-shrink-0">

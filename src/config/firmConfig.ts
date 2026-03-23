@@ -44,9 +44,9 @@ const FIRM_MAP: Record<string, FirmConfig> = {
     },
     'kailash.kailash.observer': {
         firmId: 'a41012cc-d643-41ea-a0f4-7bb5c1f08a51',
-        firmName: 'Kailash Fataka',
+        firmName: 'Kailash Cutlery',
         role: 'store_owner',
-        slug: 'kailash-fataka',
+        slug: 'kailash-cutlery',
     },
     'kartik.kailash.observer': {
         firmId: 'be17178e-4f92-4392-83de-1bfccdae1ff3',

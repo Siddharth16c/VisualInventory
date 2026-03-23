@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { db, type Item } from '@/db/dexie';
+import * as db from '@/db/local/queries';
+import { getFirmId } from '@/db/dal';
+import type { Item } from '@/db/types';
 import { useAppStore } from '@/store/store';
 import { Upload, X, Copy, CheckCircle, AlertCircle, RotateCcw } from 'lucide-react';
 
@@ -54,10 +56,10 @@ export default function BulkInsertModal({ onClose, onSuccess }: BulkInsertModalP
                     wholesale_price_container: wholesale * pUnit,
                     stock_parcels: parcels,
                     p_unit: pUnit,
-                    P_unit_per_parcel: pkgPerParcel,
+                    p_unit_per_parcel: pkgPerParcel,
                     stock_units: pUnit * pkgPerParcel * parcels,
                     mrp: 0,
-                    createdAt: new Date().toISOString(),
+                    created_at: new Date().toISOString(),
                 });
             }
 
@@ -79,20 +81,22 @@ export default function BulkInsertModal({ onClose, onSuccess }: BulkInsertModalP
             const itemsToInsert: Item[] = parsedItems.map(p => ({
                 ...p,
                 metadata: { import_batch_id: batchId },
-                createdAt: new Date().toISOString(),
+                created_at: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             })) as Item[];
 
-            await db.items.bulkAdd(itemsToInsert);
+            for (const item of itemsToInsert) {
+                await db.insertItem(getFirmId(), item);
+            }
 
             // Try to auto-create missing categories/verticals
             const uniqueCategories = new Set(itemsToInsert.map(i => i.category));
-            const existingVerticals = await db.verticals.toArray();
+            const existingVerticals = await db.getVerticals();
             const existingCatNames = new Set(existingVerticals.map(v => v.name));
 
             for (const cat of uniqueCategories) {
                 if (!existingCatNames.has(cat) && cat !== 'Uncategorized') {
-                    await db.verticals.add({ name: cat });
+                    await db.insertVertical(getFirmId(), { name: cat });
                 }
             }
 
@@ -108,7 +112,7 @@ export default function BulkInsertModal({ onClose, onSuccess }: BulkInsertModalP
 
     const handleRollback = async () => {
         // Find most recent batch id
-        const allItems = await db.items.toArray();
+        const allItems = await db.getItems(getFirmId());
         const batches = allItems
             .map(i => i.metadata?.import_batch_id)
             .filter(Boolean) as string[];
@@ -123,7 +127,9 @@ export default function BulkInsertModal({ onClose, onSuccess }: BulkInsertModalP
 
         try {
             const toDelete = allItems.filter(i => i.metadata?.import_batch_id === latestBatch).map(i => i.id!);
-            await db.items.bulkDelete(toDelete);
+            for (const id of toDelete) {
+                await db.deleteItem(id);
+            }
             addToast(`Rolled back ${toDelete.length} items`, 'success');
             onSuccess();
         } catch (e: any) {

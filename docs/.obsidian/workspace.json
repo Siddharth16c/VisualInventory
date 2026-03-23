@@ -4,21 +4,19 @@
     "type": "split",
     "children": [
       {
-        "id": "6a3084ccb7949d7a",
+        "id": "f220b73c2a009f99",
         "type": "tabs",
         "children": [
           {
-            "id": "fa0208efd3a5867f",
+            "id": "100b4073a71ecf0e",
             "type": "leaf",
             "state": {
-              "type": "markdown",
+              "type": "excalidraw",
               "state": {
-                "file": "context/PROJECT_INDEX.md",
-                "mode": "source",
-                "source": false
+                "file": "context/DB/Drawing 2026-03-14 22.04.53.excalidraw.md"
               },
-              "icon": "lucide-file",
-              "title": "PROJECT_INDEX"
+              "icon": "excalidraw-icon",
+              "title": "Drawing 2026-03-14 22.04.53.excalidraw"
             }
           }
         ]
@@ -78,7 +76,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 300,
+    "collapsed": true
   },
   "right": {
     "id": "0809757175c1d08c",
@@ -94,7 +93,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "context/PROJECT_INDEX.md",
+                "file": "context/DB/Drawing 2026-03-14 22.04.53.excalidraw.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +103,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for PROJECT_INDEX"
+              "title": "Backlinks for Drawing 2026-03-14 22.04.53.excalidraw"
             }
           },
           {
@@ -113,12 +112,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "context/PROJECT_INDEX.md",
+                "file": "context/DB/Drawing 2026-03-14 22.04.53.excalidraw.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from PROJECT_INDEX"
+              "title": "Outgoing links from Drawing 2026-03-14 22.04.53.excalidraw"
             }
           },
           {
@@ -156,21 +155,30 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "context/PROJECT_INDEX.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of PROJECT_INDEX"
+              "title": "Outline"
+            }
+          },
+          {
+            "id": "20731e31726c7738",
+            "type": "leaf",
+            "state": {
+              "type": "mermaid-toolbar-view",
+              "state": {},
+              "icon": "trident-custom",
+              "title": "Mermaid Toolbar"
             }
           }
-        ]
+        ],
+        "currentTab": 5
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 300
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -180,21 +188,49 @@
       "daily-notes:Open today's daily note": false,
       "templates:Insert template": false,
       "command-palette:Open command palette": false,
-      "bases:Create new base": false
+      "bases:Create new base": false,
+      "mermaid-tools:Open Mermaid Toolbar": false,
+      "obsidian-excalidraw-plugin:New drawing": false
     }
   },
-  "active": "073e8417ab62fdb9",
+  "active": "100b4073a71ecf0e",
   "lastOpenFiles": [
-    "supabase_schema_export.sql",
-    "setup/T7d minio directus typesense setup.md",
-    "context/CURRENT_STATE.md",
-    "prompts/implement.md",
-    "prompts/onboard.md",
-    "tasks/SPRINT.md",
-    "tasks/BACKLOG.md",
+    "context/DB/Review_comments.md",
+    "context/DB/Drawing 2026-03-14 22.04.53.excalidraw.md",
+    "context/DB/Untitled.canvas",
     "context/PROJECT_INDEX.md",
-    "UserBase/Workflow.md",
-    "UserBase/ModelRoles.md",
-    "prompts/verify.md"
+    "context/DB/supabase_schema.json",
+    "supabase_schema.json",
+    "context/DB/supabase_schema copy.md",
+    "context/DB/supabase_schema copy.json",
+    "context/DB/supabase_DB_pull.sql",
+    "context/DB/seed.sql",
+    "context/DB/seed_rollback.sql",
+    "context/DB",
+    "KB/TECHNICAL.md",
+    "KB/SETUP.md",
+    "Pipeline/SPRINT.md",
+    "Pipeline/Ideas.md",
+    "Pipeline/BACKLOG.md",
+    "Pipeline",
+    "tasks/Ideas.md",
+    "Changelog/CHANGELOG.md",
+    "Changelog/Billing_Overhaul_Changelog.md",
+    "KB/ARCHITECTURE.md",
+    "KB/FLOWCHARTS.md",
+    "KB/FUNCTIONAL.md",
+    "KB/PROJECT_RETROSPECTION_CONTEXT_ENHANCED.md",
+    "KB/README.md",
+    "SETUP.md",
+    "README.md",
+    "CHANGELOG.md",
+    "FLOWCHARTS.md",
+    "FUNCTIONAL.md",
+    "Ideas.md",
+    "TECHNICAL.md",
+    "KB/firmbasedApp.md",
+    "AUTH/ARCHitecture.md",
+    "KB",
+    "supabase_schema_export.sql"
   ]
 }

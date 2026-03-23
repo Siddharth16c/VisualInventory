@@ -1,11 +1,11 @@
 import { useRef, useCallback } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { jsPDF } from 'jspdf';
-import type { Order } from '@/db/dexie';
+import type { Order } from '@/db/types';
 import type { CartItem } from '@/store/store';
 import { useAppStore } from '@/store/store';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/dexie';
+import { useLiveQuery } from '@/db/local/hooks';
+import { DAL } from '@/db/dal';
 import InvoiceA4 from './InvoiceA4';
 import InvoiceThermal from './InvoiceThermal';
 import { X, Printer, FileText, Smartphone } from 'lucide-react';
@@ -23,9 +23,9 @@ export default function PrintHandler({ order, items, onClose }: PrintHandlerProp
     const addToast = useAppStore((s) => s.addToast);
 
     // Fetch variants for display
-    const variants = useLiveQuery(() => db.variant_params_1.toArray()) || ([] as any[]);
+    const variants = useLiveQuery(() => DAL.variant_params_1?.getAll() ?? Promise.resolve([]), [], []) || [];
     const variantMap = new Map<number, string>();
-    variants.forEach(v => variantMap.set(v.id!, v.name));
+    variants.forEach((v: { id: number; name: string }) => variantMap.set(v.id, v.name));
 
     const isQuote = order.status === 'quote';
     const label = isQuote ? 'Quote' : 'Invoice';

@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { X, Package, MoveRight, Trash2, MapPin, Boxes } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { X, Package, MoveRight, Trash2, MapPin, Boxes, Archive } from 'lucide-react';
 import type { StorageZone, StorageSlot, ItemLocation, Item } from '@/db/types';
 import { DAL, emitDbChange } from '@/db/dal';
 
@@ -48,6 +48,7 @@ export default function StockMovementDialog({
   const [destinationSlotId, setDestinationSlotId] = useState<number | ''>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [packages, setPackages] = useState<any[]>([]);
 
   // Get slot IDs for this zone
   const zoneSlotIds = useMemo(() => new Set(slots.map(s => s.id)), [slots]);
@@ -83,6 +84,15 @@ export default function StockMovementDialog({
     zones.filter(z => z.id !== sourceZone.id && !z.deleted_at),
     [zones, sourceZone.id]
   );
+
+  useEffect(() => {
+    const loadPackages = async () => {
+      const data = await (DAL as any).storage_packages.getByZone(sourceZone.id);
+      setPackages(data);
+    };
+    loadPackages();
+  }, [sourceZone.id]);
+
 
   // Get slots for selected destination zone
   const destinationZoneSlots = useMemo(() => {
@@ -308,6 +318,22 @@ export default function StockMovementDialog({
                   </select>
                 </div>
               </div>
+            </div>
+          )}
+
+          {packages.length > 0 && (
+            <div className="mb-4 space-y-2">
+              <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Packages in Zone</h3>
+              {packages.map(pkg => (
+                <div key={pkg.id} className="p-3 bg-indigo-900/20 border border-indigo-500/30 rounded-lg flex items-center gap-3">
+                  <Archive className="text-indigo-400" size={18} />
+                  <div className="flex-1">
+                    <div className="text-sm font-bold text-slate-100">{pkg.package_label}</div>
+                    <div className="text-[10px] text-indigo-300">{pkg.package_type.replace('_', ' ')}</div>
+                  </div>
+                  <button className="text-xs bg-indigo-600 px-2 py-1 rounded text-white">View Contents</button>
+                </div>
+              ))}
             </div>
           )}
 

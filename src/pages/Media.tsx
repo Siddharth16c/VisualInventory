@@ -1,291 +1,339 @@
-import { useState, useRef, useMemo } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type ProductMedia } from '@/db/dexie';
+import { useState, useRef, useMemo, useCallback } from 'react';
 import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 import { DAL } from '@/db/dal';
 import { useAppStore } from '@/store/store';
 import imageCompression from 'browser-image-compression';
 import { shareFile, downloadBlob } from '@/utils/share';
-import { Upload, Image as ImageIcon, Film, Trash2, Download, Share2, Loader2, X, Type } from 'lucide-react';
+import { Upload, Image as ImageIcon, Trash2, Download, Share2, Loader2, X, Check, Star } from 'lucide-react';
+import type { ItemMedia } from '@/db/types';
+
+interface ProcessedImage {
+    file: File;
+    base64: string;
+    width: number;
+    height: number;
+    fileSizeKb: number;
+}
 
 export default function Media() {
-    // Items + products from Supabase
     const items = useSupabaseQuery(['items'], () => DAL.items.getAll(), []) as any[];
-    const allProducts = useSupabaseQuery(['products'], () => DAL.products.getAll(), []) as any[];
     const addToast = useAppStore((s) => s.addToast);
     const activeBusiness = useAppStore((s) => s.activeBusiness);
-    const { isProcessing, ffmpegProgress, setIsProcessing, setFFmpegProgress, setProcessingMessage, processingMessage } = useAppStore();
+    const { isProcessing, setIsProcessing, setProcessingMessage, processingMessage } = useAppStore();
 
     const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
-    const mediaItems: ProductMedia[] = useLiveQuery(
-        () => (selectedItemId ? db.product_media.where('item_id').equals(selectedItemId).toArray() : Promise.resolve([] as ProductMedia[])),
-        [selectedItemId]
-    ) || [];
+    const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [textOverlayId, setTextOverlayId] = useState<number | null>(null);
-    const [overlayText, setOverlayText] = useState('');
 
-    // Product map for richer share text
-    const productMap = useMemo(() => {
-        const m = new Map<number, string>();
-        allProducts.forEach((p) => m.set(p.id!, p.name));
-        return m;
-    }, [allProducts]);
+    // Fetch media for selected item
+    const mediaItems = useSupabaseQuery(
+        ['item_media', selectedItemId?.toString() || ''],
+        async () => selectedItemId ? await DAL.item_media.getByItem(selectedItemId) : [],
+        []
+    ) as ItemMedia[];
 
-    // Get selected item info for share text
     const selectedItem = useMemo(
         () => items.find((i) => i.id === selectedItemId),
         [items, selectedItemId]
     );
 
-    const getShareText = (media: ProductMedia) => {
-        if (!selectedItem) return media.filename;
-        const product = selectedItem.product_id ? productMap.get(selectedItem.product_id) : '';
-        const parts = [
-            product || '',
-            selectedItem.item_name,
-            selectedItem.category || '',
-            selectedItem.retail_price_unit ? `Lean: Rs.${selectedItem.retail_price_unit.toFixed(2)}/u` : '',
-            selectedItem.wholesale_price_unit ? `Bulk: Rs.${selectedItem.wholesale_price_unit.toFixed(2)}/u` : '',
-            activeBusiness || '',
-        ].filter(Boolean);
-        return parts.join(' · ');
-    };
+    /**
+     * Add watermark to image using Canvas API
+     * - Diagonal tiled watermark with business name
+     * - 25% opacity white text
+     * - Returns watermarked image as base64
+     */
+    const addWatermark = useCallback(async (imageFile: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const url = URL.createObjectURL(imageFile);
 
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d')!;
+
+                canvas.width = img.width;
+                canvas.height = img.height;
+
+                // Draw original image
+                ctx.drawImage(img, 0, 0);
+
+                // Add watermark
+                const watermarkText = activeBusiness || 'SAMPLE';
+                const fontSize = Math.max(24, Math.floor(img.width / 10));
+                
+                ctx.save();
+                ctx.font = `bold ${fontSize}px sans-serif`;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                // Tile the watermark diagonally
+                const textWidth = ctx.measureText(watermarkText).width;
+                const spacingX = textWidth + fontSize * 2;
+                const spacingY = fontSize * 3;
+
+                ctx.translate(img.width / 2, img.height / 2);
+                ctx.rotate(-Math.PI / 4);
+
+                for (let y = -img.height * 1.5; y < img.height * 1.5; y += spacingY) {
+                    for (let x = -img.width * 1.5; x < img.width * 1.5; x += spacingX) {
+                        ctx.fillText(watermarkText, x, y);
+                    }
+                }
+
+                ctx.restore();
+                URL.revokeObjectURL(url);
+
+                // Convert to base64 (WebP format for better compression)
+                const base64 = canvas.toDataURL('image/webp', 0.85);
+                resolve(base64);
+            };
+
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                reject(new Error('Failed to load image'));
+            };
+
+            img.src = url;
+        });
+    }, [activeBusiness]);
+
+    /**
+     * Compress GIF by extracting frames and rebuilding at lower quality
+     * Uses canvas to resize and re-encode
+     */
+    const compressGif = useCallback(async (gifFile: File): Promise<ProcessedImage> => {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const url = URL.createObjectURL(gifFile);
+
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d')!;
+
+                // Resize GIF to max 800px (GIFs are larger, need more aggressive compression)
+                const maxDimension = 800;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height && width > maxDimension) {
+                    height = Math.round((height * maxDimension) / width);
+                    width = maxDimension;
+                } else if (height > maxDimension) {
+                    width = Math.round((width * maxDimension) / height);
+                    height = maxDimension;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+
+                URL.revokeObjectURL(url);
+
+                // Convert to WebP for better compression (fallback to PNG if needed)
+                let base64: string;
+                try {
+                    base64 = canvas.toDataURL('image/webp', 0.7);
+                } catch {
+                    // Fallback to PNG if WebP not supported
+                    base64 = canvas.toDataURL('image/png');
+                }
+
+                // Add watermark to the compressed frame
+                addWatermark(new File([base64], gifFile.name, { type: 'image/webp' }))
+                    .then(watermarkedBase64 => {
+                        resolve({
+                            file: gifFile,
+                            base64: watermarkedBase64,
+                            width,
+                            height,
+                            fileSizeKb: Math.ceil(watermarkedBase64.length * 0.75 / 1024),
+                        });
+                    })
+                    .catch(reject);
+            };
+
+            img.onerror = () => {
+                URL.revokeObjectURL(url);
+                reject(new Error('Failed to load GIF'));
+            };
+
+            img.src = url;
+        });
+    }, [addWatermark]);
+
+    /**
+     * Process a single image: compress + watermark
+     */
+    const processImage = useCallback(async (file: File): Promise<ProcessedImage> => {
+        // Handle GIFs - compress them differently
+        if (file.type === 'image/gif') {
+            return await compressGif(file);
+        }
+
+        // Step 1: Compress image (1MB max, 1200px max dimension)
+        const compressedFile = await imageCompression(file, {
+            maxSizeMB: 1,
+            maxWidthOrHeight: 1200,
+            useWebWorker: true,
+            fileType: 'image/webp',
+        });
+
+        // Step 2: Add watermark
+        const watermarkedBase64 = await addWatermark(compressedFile);
+
+        // Get dimensions
+        const dimensions = await new Promise<{ width: number; height: number }>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve({ width: img.width, height: img.height });
+            img.src = watermarkedBase64;
+        });
+
+        return {
+            file: compressedFile,
+            base64: watermarkedBase64,
+            width: dimensions.width,
+            height: dimensions.height,
+            fileSizeKb: Math.ceil(watermarkedBase64.length * 0.75 / 1024),
+        };
+    }, [addWatermark, compressGif]);
+
+    /**
+     * Handle multiple image uploads
+     * - Compress + watermark each image
+     - Save to Supabase directly (DAL)
+     * - Sync will automatically update SQLite
+     */
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!selectedItemId || !e.target.files) return;
+        if (!selectedItemId || !e.target.files || e.target.files.length === 0) return;
 
         const files = Array.from(e.target.files);
         setIsProcessing(true);
-        setProcessingMessage('Compressing images...');
+        setProcessingMessage(`Processing ${files.length} image(s)...`);
+        setUploadProgress({ current: 0, total: files.length });
 
         try {
             for (let i = 0; i < files.length; i++) {
-                let file = files[i];
-                setFFmpegProgress(((i + 1) / files.length) * 100);
-                setProcessingMessage(`Compressing ${i + 1}/${files.length}...`);
+                setUploadProgress({ current: i + 1, total: files.length });
+                setProcessingMessage(`Processing ${i + 1}/${files.length}: ${files[i].name}`);
 
-                // Compress if image (but NOT gifs, which break animation when compressed)
-                if (file.type.startsWith('image/') && file.type !== 'image/gif') {
-                    const compressed = await imageCompression(file, {
-                        maxSizeMB: 1,
-                        maxWidthOrHeight: 1920,
-                        useWebWorker: true,
-                    });
-                    file = new File([compressed], file.name, { type: compressed.type });
-                }
+                const processed = await processImage(files[i]);
 
-                const media: ProductMedia = {
+                // Save to Supabase directly via DAL
+                await DAL.item_media.add({
                     item_id: selectedItemId,
                     media_role: 'gallery',
-                    data: file,
-                    filename: file.name,
-                    mime_type: file.type,
-                    createdAt: new Date().toISOString(),
-                };
-                await db.product_media.add(media);
+                    data_base64: processed.base64,
+                    filename: files[i].name.replace(/\.[^/.]+$/, '') + '_watermarked.webp',
+                    mime_type: 'image/webp',
+                    file_size_kb: processed.fileSizeKb,
+                    width: processed.width,
+                    height: processed.height,
+                    is_watermarked: true,
+                });
             }
-            addToast(`${files.length} image(s) uploaded`, 'success');
+
+            addToast(`${files.length} image(s) uploaded with watermark`, 'success');
         } catch (e) {
+            console.error('Upload failed:', e);
             addToast('Upload failed', 'error');
         } finally {
             setIsProcessing(false);
-            setFFmpegProgress(0);
             setProcessingMessage('');
+            setUploadProgress(null);
             if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
+    /**
+     * Delete a media item
+     */
     const handleDelete = async (id: number) => {
-        await db.product_media.delete(id);
-        addToast('Media deleted', 'info');
+        try {
+            await DAL.item_media.delete(id);
+            addToast('Media deleted', 'info');
+        } catch (e) {
+            addToast('Failed to delete', 'error');
+        }
     };
 
-    const handleGenerateGif = async () => {
-        if (mediaItems.length < 2) {
-            addToast('Need at least 2 images for a GIF', 'error');
-            return;
+    /**
+     * Share media with item info
+     */
+    const handleShareMedia = async (media: ItemMedia) => {
+        try {
+            const response = await fetch(media.data_base64);
+            const blob = await response.blob();
+            const file = new File([blob], media.filename, { type: media.mime_type });
+            
+            const shareText = selectedItem
+                ? `${selectedItem.item_name} · ${activeBusiness || ''}`
+                : media.filename;
+            
+            await shareFile(file, shareText);
+        } catch (e) {
+            addToast('Failed to share', 'error');
         }
+    };
 
-        setIsProcessing(true);
-        setProcessingMessage('Generating GIF via Web Worker...');
-        setFFmpegProgress(10);
+    /**
+     * Download media
+     */
+    const handleDownloadMedia = async (media: ItemMedia) => {
+        try {
+            const response = await fetch(media.data_base64);
+            const blob = await response.blob();
+            downloadBlob(blob, media.filename);
+        } catch (e) {
+            addToast('Failed to download', 'error');
+        }
+    };
+
+    /**
+     * Set media as item thumbnail (for billing/quick view)
+     */
+    const handleSetThumbnail = async (media: ItemMedia) => {
+        if (!selectedItemId) return;
 
         try {
-            // Create a Web Worker for FFmpeg processing
-            const worker = new Worker(
-                new URL('@/workers/ffmpeg.worker.ts', import.meta.url),
-                { type: 'module' }
-            );
+            await DAL.items.update(selectedItemId, {
+                thumbnail_base64: media.data_base64,
+            });
+            addToast('Item thumbnail updated', 'success');
+        } catch (e) {
+            addToast('Failed to set thumbnail', 'error');
+        }
+    };
 
-            const imageBlobs: Blob[] = mediaItems
-                .filter((m) => m.mime_type.startsWith('image/'))
-                .map((m) => m.data);
+    /**
+     * Set media as catalogue primary image
+     * This determines which image appears in catalogue cards
+     */
+    const handleSetCataloguePrimary = async (media: ItemMedia) => {
+        if (!selectedItemId) return;
 
-            worker.postMessage({ type: 'generate-gif', images: imageBlobs });
-
-            worker.onmessage = (e) => {
-                const { type, progress, result, error } = e.data;
-                if (type === 'progress') {
-                    setFFmpegProgress(progress);
-                    setProcessingMessage(`Processing: ${progress}%`);
-                } else if (type === 'complete') {
-                    const itemName = selectedItem?.item_name || 'flipbook';
-                    const safeName = itemName.replace(/[^a-zA-Z0-9_-]/g, '_');
-                    downloadBlob(result, `${safeName}-${Date.now()}.gif`);
-                    addToast('GIF generated!', 'success');
-                    setIsProcessing(false);
-                    setFFmpegProgress(0);
-                    setProcessingMessage('');
-                    worker.terminate();
-                } else if (type === 'error') {
-                    addToast(`GIF generation failed: ${error}`, 'error');
-                    setIsProcessing(false);
-                    setFFmpegProgress(0);
-                    worker.terminate();
+        try {
+            // First, set all media for this item to 'gallery'
+            const itemMedia = mediaItems.filter(m => m.item_id === selectedItemId);
+            for (const m of itemMedia) {
+                if (m.id !== media.id && m.media_role === 'primary') {
+                    await DAL.item_media.update(m.id, { media_role: 'gallery' });
                 }
-            };
+            }
+
+            // Set selected media as primary
+            await DAL.item_media.update(media.id, { media_role: 'primary' });
+            addToast('Catalogue primary image set', 'success');
         } catch (e) {
-            addToast('GIF generation failed', 'error');
-            setIsProcessing(false);
-            setFFmpegProgress(0);
-        }
-    };
-
-    const handleShareMedia = async (item: ProductMedia) => {
-        const file = new File([item.data], item.filename, { type: item.mime_type });
-        await shareFile(file, getShareText(item));
-    };
-
-    const handleDownloadMedia = (item: ProductMedia) => {
-        downloadBlob(item.data, item.filename);
-    };
-
-    // Canvas-based text overlay — add text to an image and save
-    const handleTextOverlay = async (media: ProductMedia) => {
-        if (!overlayText.trim()) {
-            addToast('Enter text to overlay', 'error');
-            return;
-        }
-
-        try {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d')!;
-            const img = new Image();
-            const url = URL.createObjectURL(media.data);
-
-            await new Promise<void>((resolve) => {
-                img.onload = () => {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    ctx.drawImage(img, 0, 0);
-
-                    // Text overlay — bottom center with semi-transparent background
-                    const fontSize = Math.max(16, Math.floor(img.width / 20));
-                    ctx.font = `bold ${fontSize}px sans-serif`;
-                    const textMetrics = ctx.measureText(overlayText);
-                    const textWidth = textMetrics.width;
-                    const padding = fontSize * 0.5;
-                    const boxHeight = fontSize * 1.6;
-                    const boxY = img.height - boxHeight - padding;
-                    const boxX = (img.width - textWidth) / 2 - padding;
-
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-                    ctx.roundRect?.(boxX, boxY, textWidth + padding * 2, boxHeight, 8);
-                    ctx.fill();
-
-                    ctx.fillStyle = '#ffffff';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText(overlayText, img.width / 2, boxY + boxHeight / 2);
-
-                    URL.revokeObjectURL(url);
-                    resolve();
-                };
-                img.src = url;
-            });
-
-            const blob = await new Promise<Blob>((resolve) =>
-                canvas.toBlob((b) => resolve(b!), 'image/png')
-            );
-
-            const overlaidMedia: ProductMedia = {
-                item_id: media.item_id,
-                media_role: 'gallery',
-                data: blob,
-                filename: `overlay-${media.filename.replace(/\.[^.]+$/, '')}.png`,
-                mime_type: 'image/png',
-                createdAt: new Date().toISOString(),
-            };
-            await db.product_media.add(overlaidMedia);
-            addToast('Text overlay saved as new image', 'success');
-            setTextOverlayId(null);
-            setOverlayText('');
-        } catch (e) {
-            addToast('Overlay failed', 'error');
-        }
-    };
-
-    // Canvas-based watermark — stamp business name diagonally
-    const handleWatermark = async (media: ProductMedia) => {
-        try {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d')!;
-            const img = new Image();
-            const url = URL.createObjectURL(media.data);
-
-            await new Promise<void>((resolve) => {
-                img.onload = () => {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    ctx.drawImage(img, 0, 0);
-
-                    // Diagonal watermark
-                    const text = activeBusiness || 'SAMPLE';
-                    const fontSize = Math.max(24, Math.floor(img.width / 12));
-                    ctx.font = `bold ${fontSize}px sans-serif`;
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.translate(img.width / 2, img.height / 2);
-                    ctx.rotate(-Math.PI / 4);
-
-                    // Tile the watermark
-                    for (let y = -img.height; y < img.height; y += fontSize * 3) {
-                        for (let x = -img.width; x < img.width; x += ctx.measureText(text).width + fontSize * 2) {
-                            ctx.fillText(text, x, y);
-                        }
-                    }
-
-                    URL.revokeObjectURL(url);
-                    resolve();
-                };
-                img.src = url;
-            });
-
-            const blob = await new Promise<Blob>((resolve) =>
-                canvas.toBlob((b) => resolve(b!), 'image/png')
-            );
-
-            const wmMedia: ProductMedia = {
-                item_id: media.item_id,
-                media_role: 'gallery',
-                data: blob,
-                filename: `watermarked-${media.filename.replace(/\.[^.]+$/, '')}.png`,
-                mime_type: 'image/png',
-                createdAt: new Date().toISOString(),
-            };
-            await db.product_media.add(wmMedia);
-            addToast('Watermarked copy saved', 'success');
-        } catch (e) {
-            addToast('Watermark failed', 'error');
+            addToast('Failed to set catalogue image', 'error');
         }
     };
 
     return (
         <div className="animate-fade-in space-y-4">
+            {/* Header Controls */}
             <div className="flex flex-col sm:flex-row gap-3">
-                {/* Item selector */}
                 <select
                     className="input-field max-w-xs"
                     value={selectedItemId || ''}
@@ -304,32 +352,41 @@ export default function Media() {
                             className="btn-primary text-sm flex items-center gap-2"
                             disabled={isProcessing}
                         >
-                            <Upload className="h-4 w-4" /> Upload Images
-                        </button>
-                        <button
-                            onClick={handleGenerateGif}
-                            className="btn-secondary text-sm flex items-center gap-2"
-                            disabled={isProcessing || mediaItems.length < 2}
-                        >
-                            <Film className="h-4 w-4" /> Generate GIF
+                            <Upload className="h-4 w-4" /> 
+                            Upload Images
                         </button>
                     </div>
                 )}
             </div>
 
             {/* Progress Bar */}
-            {isProcessing && (
+            {isProcessing && uploadProgress && (
                 <div className="glass rounded-xl p-4">
                     <div className="flex items-center gap-3 mb-2">
                         <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
-                        <span className="text-sm text-surface-500">{processingMessage}</span>
+                        <span className="text-sm text-surface-500">
+                            {processingMessage}
+                        </span>
                     </div>
                     <div className="w-full bg-surface-200 rounded-full h-2.5">
                         <div
                             className="bg-gradient-to-r from-brand-600 to-brand-400 h-2.5 rounded-full transition-all duration-300"
-                            style={{ width: `${ffmpegProgress}%` }}
+                            style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
                         />
                     </div>
+                    <p className="text-xs text-surface-400 mt-1">
+                        {uploadProgress.current} of {uploadProgress.total} images processed
+                    </p>
+                </div>
+            )}
+
+            {/* Watermark Notice */}
+            {selectedItemId && !isProcessing && (
+                <div className="glass rounded-xl p-3 bg-amber-50/50 border border-amber-200">
+                    <p className="text-xs text-amber-700">
+                        All uploaded images will be automatically watermarked with &quot;{activeBusiness || 'Business Name'}&quot; 
+                        and compressed to max 1MB for optimal sharing.
+                    </p>
                 </div>
             )}
 
@@ -340,47 +397,62 @@ export default function Media() {
                         <div className="col-span-full glass rounded-xl p-12 text-center">
                             <ImageIcon className="h-12 w-12 text-surface-600 mx-auto mb-3" />
                             <p className="text-surface-500">No media yet. Upload some images!</p>
+                            <p className="text-xs text-surface-400 mt-2">
+                                Images will be watermarked and compressed automatically
+                            </p>
                         </div>
                     ) : (
-                        mediaItems.map((item) => (
-                            <div key={item.id} className="glass rounded-xl overflow-hidden group card-hover">
+                        mediaItems.map((media) => (
+                            <div key={media.id} className="glass rounded-xl overflow-hidden group card-hover">
                                 <div className="aspect-square bg-surface-100 relative">
                                     <img
-                                        src={URL.createObjectURL(item.data)}
-                                        alt={item.filename}
+                                        src={media.data_base64}
+                                        alt={media.filename}
                                         className="w-full h-full object-cover"
+                                        loading="lazy"
                                     />
+                                    {/* Watermark Badge */}
+                                    {media.is_watermarked && (
+                                        <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-amber-500/80 text-white text-[8px] rounded">
+                                            W
+                                        </div>
+                                    )}
+                                    {/* Hover Actions */}
                                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
                                         <button
-                                            onClick={() => handleShareMedia(item)}
+                                            onClick={() => handleShareMedia(media)}
                                             className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30"
-                                            title="Share with item info"
+                                            title="Share"
                                         >
                                             <Share2 className="h-4 w-4 text-white" />
                                         </button>
                                         <button
-                                            onClick={() => handleDownloadMedia(item)}
+                                            onClick={() => handleDownloadMedia(media)}
                                             className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30"
                                             title="Download"
                                         >
                                             <Download className="h-4 w-4 text-white" />
                                         </button>
                                         <button
-                                            onClick={() => { setTextOverlayId(item.id!); setOverlayText(''); }}
-                                            className="h-8 w-8 rounded-full bg-brand-500/30 flex items-center justify-center hover:bg-brand-500/50"
-                                            title="Add text overlay"
+                                            onClick={() => handleSetThumbnail(media)}
+                                            className="h-8 w-8 rounded-full bg-green-500/30 flex items-center justify-center hover:bg-green-500/50"
+                                            title="Set as item thumbnail"
                                         >
-                                            <Type className="h-4 w-4 text-white" />
+                                            <Check className="h-4 w-4 text-white" />
                                         </button>
                                         <button
-                                            onClick={() => handleWatermark(item)}
-                                            className="h-8 w-8 rounded-full bg-amber-500/30 flex items-center justify-center hover:bg-amber-500/50"
-                                            title="Add watermark"
+                                            onClick={() => handleSetCataloguePrimary(media)}
+                                            className={`h-8 w-8 rounded-full flex items-center justify-center ${
+                                                media.media_role === 'primary' 
+                                                    ? 'bg-yellow-500 text-white' 
+                                                    : 'bg-yellow-500/30 hover:bg-yellow-500/50'
+                                            }`}
+                                            title={media.media_role === 'primary' ? 'Catalogue primary image' : 'Set as catalogue primary'}
                                         >
-                                            <span className="text-xs font-bold text-white">W</span>
+                                            <Star className="h-4 w-4 text-white" fill={media.media_role === 'primary' ? 'currentColor' : 'none'} />
                                         </button>
                                         <button
-                                            onClick={() => handleDelete(item.id!)}
+                                            onClick={() => handleDelete(media.id)}
                                             className="h-8 w-8 rounded-full bg-red-500/30 flex items-center justify-center hover:bg-red-500/50"
                                             title="Delete"
                                         >
@@ -389,33 +461,12 @@ export default function Media() {
                                     </div>
                                 </div>
                                 <div className="p-2">
-                                    <p className="text-xs text-surface-500 truncate">{item.filename}</p>
+                                    <p className="text-xs text-surface-500 truncate">{media.filename}</p>
+                                    <p className="text-[10px] text-surface-400">
+                                        {media.file_size_kb ? `${media.file_size_kb} KB` : ''}
+                                        {media.width && media.height ? ` · ${media.width}×${media.height}` : ''}
+                                    </p>
                                 </div>
-
-                                {/* Text overlay input (shown inline when active) */}
-                                {textOverlayId === item.id && (
-                                    <div className="p-2 border-t border-surface-200 flex gap-1">
-                                        <input
-                                            className="input-field text-xs flex-1"
-                                            placeholder="Enter text..."
-                                            value={overlayText}
-                                            onChange={(e) => setOverlayText(e.target.value)}
-                                            autoFocus
-                                        />
-                                        <button
-                                            onClick={() => handleTextOverlay(item)}
-                                            className="btn-primary text-xs px-2 py-1"
-                                        >
-                                            Add
-                                        </button>
-                                        <button
-                                            onClick={() => setTextOverlayId(null)}
-                                            className="btn-ghost text-xs px-2 py-1"
-                                        >
-                                            <X className="h-3 w-3" />
-                                        </button>
-                                    </div>
-                                )}
                             </div>
                         ))
                     )}
@@ -427,10 +478,27 @@ export default function Media() {
                 </div>
             )}
 
+            {/* Current Thumbnail Preview */}
+            {selectedItem?.thumbnail_base64 && (
+                <div className="glass rounded-xl p-4">
+                    <h3 className="text-sm font-medium text-surface-600 mb-2">Current Item Thumbnail</h3>
+                    <div className="flex items-center gap-3">
+                        <img
+                            src={selectedItem.thumbnail_base64}
+                            alt="Thumbnail"
+                            className="w-16 h-16 object-cover rounded-lg"
+                        />
+                        <div className="text-xs text-surface-500">
+                            <p>Used in billing and catalogues</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,.gif"
                 multiple
                 className="hidden"
                 onChange={handleUpload}

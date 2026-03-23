@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db/dexie';
 import { useAppStore } from '@/store/store';
 import { Plus, Pencil, Trash2, X, Save, Settings } from 'lucide-react';
+import { getDb } from '@/db/local/db';
+import * as queries from '@/db/local/queries';
+import { queueWrite } from '@/db/local/sync';
+import { getFirmId, DAL } from '@/db/dal';
 
 // ─── Types for the static tables we manage ──────────────────────
 
@@ -26,6 +28,24 @@ type FieldDef = {
 
 // ─── Component ──────────────────────────────────────────────────
 
+const genericUpdate = async (table: string, id: number, data: any) => {
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    for (const [key, value] of Object.entries(data)) {
+        if (key === 'id') continue;
+        setClauses.push(`${key} = ?`);
+        values.push(value);
+    }
+    values.push(id);
+    await getDb().sql(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = ?`, values);
+    await queueWrite(table, 'UPDATE', id, data);
+};
+
+const genericDelete = async (table: string, id: number) => {
+    await getDb().sql(`DELETE FROM ${table} WHERE id = ?`, [id]);
+    await queueWrite(table, 'DELETE', id);
+};
+
 export default function StaticDataManager({ tableKey, onClose }: { tableKey: string; onClose: () => void }) {
     const addToast = useAppStore((s) => s.addToast);
     const [rows, setRows] = useState<any[]>([]);
@@ -42,10 +62,10 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
             fields: [
                 { name: 'name', label: 'Name', type: 'text', required: true },
             ],
-            getAll: () => db.verticals.toArray(),
-            add: (item) => db.verticals.add(item),
-            update: (id, item) => db.verticals.update(id, item),
-            remove: (id) => db.verticals.delete(id),
+            getAll: () => queries.getVerticals(),
+            add: (item) => queries.insertVertical(getFirmId(), item),
+            update: (id, item) => genericUpdate('verticals', id, item),
+            remove: (id) => genericDelete('verticals', id),
         },
         brands: {
             key: 'brands',
@@ -55,15 +75,15 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                 {
                     name: 'vertical_id', label: 'Vertical', type: 'select',
                     options: async () => {
-                        const verts = await db.verticals.toArray();
+                        const verts = await queries.getVerticals();
                         return verts.map((v: any) => ({ value: v.id!, label: v.name }));
                     },
                 },
             ],
-            getAll: () => db.brands.toArray(),
-            add: (item) => db.brands.add(item),
-            update: (id, item) => db.brands.update(id, item),
-            remove: (id) => db.brands.delete(id),
+            getAll: () => queries.getBrands(),
+            add: (item) => queries.insertBrand(getFirmId(), item),
+            update: (id, item) => genericUpdate('brands', id, item),
+            remove: (id) => genericDelete('brands', id),
         },
 
         packing_units: {
@@ -73,10 +93,10 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                 { name: 'unit_name', label: 'Unit Name', type: 'text', required: true },
                 { name: 'multiplier', label: 'Multiplier', type: 'number', required: true },
             ],
-            getAll: () => db.packing_units.toArray(),
-            add: (item) => db.packing_units.add(item),
-            update: (id, item) => db.packing_units.update(id, item),
-            remove: (id) => db.packing_units.delete(id),
+            getAll: () => queries.getPackingUnits(),
+            add: (item) => queries.insertPackingUnit(getFirmId(), item),
+            update: (id, item) => genericUpdate('packing_units', id, item),
+            remove: (id) => genericDelete('packing_units', id),
         },
         products: {
             key: 'products',
@@ -87,15 +107,15 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                 {
                     name: 'vertical_id', label: 'Vertical', type: 'select',
                     options: async () => {
-                        const verts = await db.verticals.toArray();
+                        const verts = await queries.getVerticals();
                         return verts.map((v: any) => ({ value: v.id!, label: v.name }));
                     },
                 },
             ],
-            getAll: () => db.products.toArray(),
-            add: (item) => db.products.add(item),
-            update: (id, item) => db.products.update(id, item),
-            remove: (id) => db.products.delete(id),
+            getAll: () => DAL.products.getAll(),
+            add: (item) => queries.insertProduct(getFirmId(), item),
+            update: (id, item) => genericUpdate('products', id, item),
+            remove: (id) => genericDelete('products', id),
         },
         variant_params_1: {
             key: 'variant_params_1',
@@ -105,15 +125,15 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                 {
                     name: 'product_id', label: 'Product', type: 'select',
                     options: async () => {
-                        const prods = await db.products.toArray();
+                        const prods = await DAL.products.getAll();
                         return prods.map((p: any) => ({ value: p.id!, label: p.name }));
                     },
                 },
             ],
-            getAll: () => db.variant_params_1.toArray(),
-            add: (item) => db.variant_params_1.add(item),
-            update: (id, item) => db.variant_params_1.update(id, item),
-            remove: (id) => db.variant_params_1.delete(id),
+            getAll: () => DAL.variant_params_1.getAll(),
+            add: (item) => queries.insertVariantParam(getFirmId(), 'variant_params_1', item),
+            update: (id, item) => genericUpdate('variant_params_1', id, item),
+            remove: (id) => genericDelete('variant_params_1', id),
         },
         variant_params_2: {
             key: 'variant_params_2',
@@ -123,15 +143,15 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                 {
                     name: 'product_id', label: 'Product', type: 'select',
                     options: async () => {
-                        const prods = await db.products.toArray();
+                        const prods = await DAL.products.getAll();
                         return prods.map((p: any) => ({ value: p.id!, label: p.name }));
                     },
                 },
             ],
-            getAll: () => db.variant_params_2.toArray(),
-            add: (item) => db.variant_params_2.add(item),
-            update: (id, item) => db.variant_params_2.update(id, item),
-            remove: (id) => db.variant_params_2.delete(id),
+            getAll: () => DAL.variant_params_2.getAll(),
+            add: (item) => queries.insertVariantParam(getFirmId(), 'variant_params_2', item),
+            update: (id, item) => genericUpdate('variant_params_2', id, item),
+            remove: (id) => genericDelete('variant_params_2', id),
         },
         variant_params_3: {
             key: 'variant_params_3',
@@ -141,15 +161,15 @@ export default function StaticDataManager({ tableKey, onClose }: { tableKey: str
                 {
                     name: 'product_id', label: 'Product', type: 'select',
                     options: async () => {
-                        const prods = await db.products.toArray();
+                        const prods = await DAL.products.getAll();
                         return prods.map((p: any) => ({ value: p.id!, label: p.name }));
                     },
                 },
             ],
-            getAll: () => db.variant_params_3.toArray(),
-            add: (item) => db.variant_params_3.add(item),
-            update: (id, item) => db.variant_params_3.update(id, item),
-            remove: (id) => db.variant_params_3.delete(id),
+            getAll: () => DAL.variant_params_3.getAll(),
+            add: (item) => queries.insertVariantParam(getFirmId(), 'variant_params_3', item),
+            update: (id, item) => genericUpdate('variant_params_3', id, item),
+            remove: (id) => genericDelete('variant_params_3', id),
         },
     };
 
