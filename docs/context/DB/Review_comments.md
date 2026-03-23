@@ -40,3 +40,9 @@ whether we can gather records based on item_id(fk) in stock_details table and fo
 7. Online hosting on vercel - prod ready(online/offline)
 8. Reports/KPIs/accounting features
 9. Design fixes - colors, responsive(mobile, tab and large devices)
+
+
+
+_______
+new features:
+1. Daily task manager - sprint board(list of tasks); list of workers/identities; today's tasks arranged in hierarchy
