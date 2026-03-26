@@ -362,6 +362,7 @@ export async function ensureItemsCollection(): Promise<boolean> {
         { name: 'p_unit', type: 'int32' },
         { name: 'p_unit_per_parcel', type: 'int32' },
       ],
+      // @ts-ignore - Typesense type issue, works at runtime
       default_sorting_field: 'stock_parcels',
     });
 

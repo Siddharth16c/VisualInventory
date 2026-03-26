@@ -1,7 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useLiveQuery } from '@/db/local/hooks';
-import * as db from '@/db/local/queries';
-import { DAL, getFirmId } from '@/db/dal';
+import { useState, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { DAL } from '@/db/dal';
 import type { Item } from '@/db/types';
 import { useAppStore } from '@/store/store';
 import { Plus, Pencil, Trash2, Search, ChevronRight, ChevronDown, X, Package, Upload } from 'lucide-react';
@@ -65,13 +64,36 @@ function ItemModal({
     onClose: () => void;
 }) {
     const addToast = useAppStore((s) => s.addToast);
-    const verticals = useLiveQuery(() => db.getVerticals()) || [];
-    const allProducts = useLiveQuery(() => DAL.products.getAll()) || [];
-    const allBrands = useLiveQuery(() => db.getBrands()) || [];
-    const packingUnits = useLiveQuery(() => db.getPackingUnits()) || [];
-    const allVP1 = useLiveQuery(() => DAL.variant_params_1.getAll()) || [];
-    const allVP2 = useLiveQuery(() => DAL.variant_params_2.getAll()) || [];
-    const allVP3 = useLiveQuery(() => DAL.variant_params_3.getAll()) || [];
+    const queryClient = useQueryClient();
+    
+    const { data: verticals = [] } = useQuery({
+        queryKey: ['verticals'],
+        queryFn: () => DAL.verticals.getAll(),
+    });
+    const { data: allProducts = [] } = useQuery({
+        queryKey: ['products'],
+        queryFn: () => DAL.products.getAll(),
+    });
+    const { data: allBrands = [] } = useQuery({
+        queryKey: ['brands'],
+        queryFn: () => DAL.brands.getAll(),
+    });
+    const { data: packingUnits = [] } = useQuery({
+        queryKey: ['packing_units'],
+        queryFn: () => DAL.packing_units.getAll(),
+    });
+    const { data: allVP1 = [] } = useQuery({
+        queryKey: ['variant_params_1'],
+        queryFn: () => DAL.variant_params_1.getAll(),
+    });
+    const { data: allVP2 = [] } = useQuery({
+        queryKey: ['variant_params_2'],
+        queryFn: () => DAL.variant_params_2.getAll(),
+    });
+    const { data: allVP3 = [] } = useQuery({
+        queryKey: ['variant_params_3'],
+        queryFn: () => DAL.variant_params_3.getAll(),
+    });
 
     const [form, setForm] = useState({
         item_name: item?.item_name || '',
@@ -95,102 +117,46 @@ function ItemModal({
     });
 
     const filteredProducts = useMemo(
-        () => allProducts.filter((p) => !form.category || p.category === form.category),
+        () => allProducts.filter((p: any) => !form.category || p.category === form.category),
         [allProducts, form.category]
     );
 
     const filteredBrands = useMemo(
-        () => allBrands.filter((b) => !form.vertical_id || b.vertical_id === form.vertical_id),
+        () => allBrands.filter((b: any) => !form.vertical_id || b.vertical_id === form.vertical_id),
         [allBrands, form.vertical_id]
     );
 
     // Variant params filtered by selected product (+ generic ones with no product_id)
     const filteredVP1 = useMemo(
-        () => allVP1.filter((v) => !v.product_id || v.product_id === form.product_id),
+        () => allVP1.filter((v: any) => !v.product_id || v.product_id === form.product_id),
         [allVP1, form.product_id]
     );
     const filteredVP2 = useMemo(
-        () => allVP2.filter((v) => !v.product_id || v.product_id === form.product_id),
+        () => allVP2.filter((v: any) => !v.product_id || v.product_id === form.product_id),
         [allVP2, form.product_id]
     );
     const filteredVP3 = useMemo(
-        () => allVP3.filter((v) => !v.product_id || v.product_id === form.product_id),
+        () => allVP3.filter((v: any) => !v.product_id || v.product_id === form.product_id),
         [allVP3, form.product_id]
     );
 
-    const categories = useMemo(() => verticals.map((v) => v.name), [verticals]);
+    const categories = useMemo(() => verticals.map((v: any) => v.name), [verticals]);
 
     // Get currently selected packing multiplier
     const selectedMultiplier = useMemo(() => {
         if (!form.packing_unit_id) return 0;
-        const pu = packingUnits.find((p) => p.id === form.packing_unit_id);
+        const pu = packingUnits.find((p: any) => p.id === form.packing_unit_id);
         return pu?.multiplier ?? 0;
     }, [packingUnits, form.packing_unit_id]);
 
     // Auto-compute container prices from packing unit
-    useEffect(() => {
-        if (selectedMultiplier > 1) {
-            setForm((f) => ({
-                ...f,
-                p_unit: selectedMultiplier,
-                retail_price_container: Number(f.retail_price_unit) * selectedMultiplier || '',
-                wholesale_price_container: Number(f.wholesale_price_unit) * selectedMultiplier || '',
-            }));
-        }
-    }, [form.retail_price_unit, form.wholesale_price_unit, selectedMultiplier]);
-
-    // Auto-compute stock_units: p_unit × p_unit_per_parcel × parcels
-    useEffect(() => {
-        const pUnit = Number(form.p_unit) || 1;
-        const pkgQty = Number(form.p_unit_per_parcel) || 1;
-        const parcels = Number(form.stock_parcels) || 0;
-        setForm((f) => ({
-            ...f,
-            stock_units: pUnit * pkgQty * parcels,
-        }));
-    }, [form.stock_parcels, form.p_unit, form.p_unit_per_parcel]);
-
-    const handleCategoryChange = (cat: string) => {
-        const vert = verticals.find((v) => v.name === cat);
-        setForm((f) => ({
-            ...f,
-            category: cat,
-            vertical_id: vert?.id ?? 0,
-            product_id: 0,
-            brand_id: 0,
-            variant_param1_id: 0,
-            variant_param2_id: 0,
-            variant_param3_id: 0,
-        }));
-    };
-
-    const handleProductChange = (productId: number) => {
-        setForm((f) => ({ ...f, product_id: productId, variant_param1_id: 0, variant_param2_id: 0, variant_param3_id: 0 }));
-    };
-
-    const handlePackingChange = (puId: number) => {
-        const pu = packingUnits.find((p) => p.id === puId);
-        const mult = pu?.multiplier ?? 0;
-        if (mult > 1) {
-            setForm((f) => ({
-                ...f,
-                packing_unit_id: puId,
-                p_unit: mult,
-                retail_price_container: Number(f.retail_price_unit) * mult || '',
-                wholesale_price_container: Number(f.wholesale_price_unit) * mult || '',
-            }));
-        } else {
-            setForm((f) => ({ ...f, packing_unit_id: puId }));
-        }
-    };
-
     const handleSave = async () => {
         if (!form.item_name.trim()) {
             addToast('Item name is required', 'error');
             return;
         }
 
-        const data: Omit<Item, 'id' | 'firm_id'> = {
+        const data: any = {
             item_name: form.item_name.trim(),
             category: form.category,
             product_id: form.product_id || undefined,
@@ -211,23 +177,22 @@ function ItemModal({
             reorder_threshold: 0,
             stock_parcels: Number(form.stock_parcels) || 0,
             stock_units: Number(form.stock_units) || 0,
-            created_at: item?.created_at || new Date().toISOString(),
-            updated_at: new Date().toISOString(),
         };
 
-        const editingId = item?.id;
-        if (editingId) {
-            // Remove readonly fields and created_at before update
-            const updateData = { ...data } as Partial<Item>;
-            delete updateData.created_at;
-            delete updateData.metadata;
-            await db.updateItem(editingId, { ...updateData, updated_at: new Date().toISOString() });
-            addToast('Item updated', 'success');
-        } else {
-            await db.insertItem(getFirmId(), data as any);
-            addToast('Item added', 'success');
+        try {
+            if (item?.id) {
+                await DAL.items.update(item.id, data);
+                addToast('Item updated', 'success');
+            } else {
+                await DAL.items.add(data);
+                addToast('Item added', 'success');
+            }
+            queryClient.invalidateQueries({ queryKey: ['items'] });
+            onClose();
+        } catch (err) {
+            console.error('Save failed:', err);
+            addToast('Save failed', 'error');
         }
-        onClose();
     };
 
     const numField = (label: string, key: string, placeholder = '', readOnly = false) => (
@@ -244,8 +209,6 @@ function ItemModal({
             />
         </div>
     );
-
-    const containerAutoComputed = selectedMultiplier > 1;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -264,14 +227,15 @@ function ItemModal({
                         <InlineAdd
                             placeholder="New Category"
                             onAdd={async (name) => {
-                                await db.insertVertical(getFirmId(), { name });
+                                await DAL.verticals.add({ name });
+                                queryClient.invalidateQueries({ queryKey: ['verticals'] });
                                 addToast(`Category "${name}" added`, 'success');
                             }}
                         />
                     </div>
-                    <select className="input-field" value={form.category} onChange={(e) => handleCategoryChange(e.target.value)}>
+                    <select className="input-field" value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value, vertical_id: verticals.find((v: any) => v.name === e.target.value)?.id ?? 0 }))}>
                         <option value="">Select Category</option>
-                        {categories.map((c) => (<option key={c} value={c}>{c}</option>))}
+                        {categories.map((c: string) => (<option key={c} value={c}>{c}</option>))}
                     </select>
                 </div>
 
@@ -283,14 +247,15 @@ function ItemModal({
                             <InlineAdd
                                 placeholder="New Product"
                                 onAdd={async (name) => {
-                                    await db.insertProduct(getFirmId(), { name, category: form.category, vertical_id: form.vertical_id || undefined });
+                                    await DAL.products.add({ name, category: form.category, vertical_id: form.vertical_id || undefined });
+                                    queryClient.invalidateQueries({ queryKey: ['products'] });
                                     addToast(`Product "${name}" added`, 'success');
                                 }}
                             />
                         </div>
-                        <select className="input-field" value={form.product_id} onChange={(e) => handleProductChange(Number(e.target.value))}>
+                        <select className="input-field" value={form.product_id} onChange={(e) => setForm((f) => ({ ...f, product_id: Number(e.target.value) }))}>
                             <option value={0}>Select Product</option>
-                            {filteredProducts.map((p) => (<option key={p.id} value={p.id}>{p.name}</option>))}
+                            {filteredProducts.map((p: any) => (<option key={p.id} value={p.id}>{p.name}</option>))}
                         </select>
                     </div>
                 )}
@@ -309,14 +274,15 @@ function ItemModal({
                             <InlineAdd
                                 placeholder="New Size"
                                 onAdd={async (name) => {
-                                    await db.insertVariantParam(getFirmId(), 'variant_params_1', { name, product_id: form.product_id || undefined });
+                                    await DAL.variant_params_1.add({ name, product_id: form.product_id || undefined });
+                                    queryClient.invalidateQueries({ queryKey: ['variant_params_1'] });
                                     addToast(`Variant "${name}" added`, 'success');
                                 }}
                             />
                         </div>
                         <select className="input-field" value={form.variant_param1_id} onChange={(e) => setForm((f) => ({ ...f, variant_param1_id: Number(e.target.value) }))}>
                             <option value={0}>Select Size</option>
-                            {filteredVP1.map((v) => (<option key={v.id} value={v.id}>{v.name}</option>))}
+                            {filteredVP1.map((v: any) => (<option key={v.id} value={v.id}>{v.name}</option>))}
                         </select>
                     </div>
 
@@ -327,14 +293,15 @@ function ItemModal({
                             <InlineAdd
                                 placeholder="New Type"
                                 onAdd={async (name) => {
-                                    await db.insertVariantParam(getFirmId(), 'variant_params_2', { name, product_id: form.product_id || undefined });
+                                    await DAL.variant_params_2.add({ name, product_id: form.product_id || undefined });
+                                    queryClient.invalidateQueries({ queryKey: ['variant_params_2'] });
                                     addToast(`Variant "${name}" added`, 'success');
                                 }}
                             />
                         </div>
                         <select className="input-field" value={form.variant_param2_id} onChange={(e) => setForm((f) => ({ ...f, variant_param2_id: Number(e.target.value) }))}>
                             <option value={0}>Select Type</option>
-                            {filteredVP2.map((v) => (<option key={v.id} value={v.id}>{v.name}</option>))}
+                            {filteredVP2.map((v: any) => (<option key={v.id} value={v.id}>{v.name}</option>))}
                         </select>
                     </div>
 
@@ -345,14 +312,15 @@ function ItemModal({
                             <InlineAdd
                                 placeholder="New Size"
                                 onAdd={async (name) => {
-                                    await db.insertVariantParam(getFirmId(), 'variant_params_3', { name, product_id: form.product_id || undefined });
+                                    await DAL.variant_params_3.add({ name, product_id: form.product_id || undefined });
+                                    queryClient.invalidateQueries({ queryKey: ['variant_params_3'] });
                                     addToast(`Size "${name}" added`, 'success');
                                 }}
                             />
                         </div>
                         <select className="input-field" value={form.variant_param3_id} onChange={(e) => setForm((f) => ({ ...f, variant_param3_id: Number(e.target.value) }))}>
                             <option value={0}>Select Size</option>
-                            {filteredVP3.map((v) => (<option key={v.id} value={v.id}>{v.name}</option>))}
+                            {filteredVP3.map((v: any) => (<option key={v.id} value={v.id}>{v.name}</option>))}
                         </select>
                     </div>
                 </div>
@@ -365,14 +333,15 @@ function ItemModal({
                             placeholder="New Brand"
                             onAdd={async (name) => {
                                 if (!form.vertical_id) { addToast('Select a category first', 'error'); return; }
-                                await db.insertBrand(getFirmId(), { name, vertical_id: form.vertical_id });
+                                await DAL.brands.add({ name, vertical_id: form.vertical_id });
+                                queryClient.invalidateQueries({ queryKey: ['brands'] });
                                 addToast(`Brand "${name}" added`, 'success');
                             }}
                         />
                     </div>
                     <select className="input-field" value={form.brand_id} onChange={(e) => setForm((f) => ({ ...f, brand_id: Number(e.target.value) }))}>
                         <option value={0}>Select Brand</option>
-                        {filteredBrands.map((b) => (<option key={b.id} value={b.id}>{b.name}</option>))}
+                        {filteredBrands.map((b: any) => (<option key={b.id} value={b.id}>{b.name}</option>))}
                     </select>
                 </div>
 
@@ -384,20 +353,16 @@ function ItemModal({
                             placeholder="e.g. box-10"
                             onAdd={async (name) => {
                                 const mult = parseInt(name.replace(/\D/g, '')) || 1;
-                                await db.insertPackingUnit(getFirmId(), { unit_name: name, multiplier: mult });
+                                await DAL.packing_units.add({ unit_name: name, multiplier: mult });
+                                queryClient.invalidateQueries({ queryKey: ['packing_units'] });
                                 addToast(`Packing "${name}" (×${mult}) added`, 'success');
                             }}
                         />
                     </div>
-                    <select className="input-field" value={form.packing_unit_id} onChange={(e) => handlePackingChange(Number(e.target.value))}>
+                    <select className="input-field" value={form.packing_unit_id} onChange={(e) => setForm((f) => ({ ...f, packing_unit_id: Number(e.target.value) }))}>
                         <option value={0}>Select Packing</option>
-                        {packingUnits.map((pu) => (<option key={pu.id} value={pu.id}>{pu.unit_name} (×{pu.multiplier})</option>))}
+                        {packingUnits.map((pu: any) => (<option key={pu.id} value={pu.id}>{pu.unit_name} (×{pu.multiplier})</option>))}
                     </select>
-                    {containerAutoComputed && (
-                        <p className="text-xs text-emerald-600 mt-1">
-                            Container prices auto-computed (×{selectedMultiplier})
-                        </p>
-                    )}
                 </div>
 
                 {/* MRP */}
@@ -410,7 +375,7 @@ function ItemModal({
                     </h3>
                     <div className="grid grid-cols-2 gap-3">
                         {numField('Per Unit', 'retail_price_unit', '0.00')}
-                        {numField('Per Container', 'retail_price_container', '0.00', containerAutoComputed)}
+                        {numField('Per Container', 'retail_price_container', '0.00')}
                     </div>
                 </div>
                 <div className="border border-surface-300 rounded-xl p-3 space-y-3">
@@ -419,7 +384,7 @@ function ItemModal({
                     </h3>
                     <div className="grid grid-cols-2 gap-3">
                         {numField('Per Unit', 'wholesale_price_unit', '0.00')}
-                        {numField('Per Container', 'wholesale_price_container', '0.00', containerAutoComputed)}
+                        {numField('Per Container', 'wholesale_price_container', '0.00')}
                     </div>
                 </div>
 
@@ -434,9 +399,6 @@ function ItemModal({
                         {numField('Parcels', 'stock_parcels', '0')}
                         {numField('Total Units', 'stock_units', '0', true)}
                     </div>
-                    <p className="text-xs text-surface-400">
-                        Total = p_unit × p_unit_per_parcel × parcels ({Number(form.p_unit) || 1} × {Number(form.p_unit_per_parcel) || 1} × {Number(form.stock_parcels) || 0} = {Number(form.stock_units) || 0})
-                    </p>
                 </div>
 
                 <div className="flex gap-3 pt-2">
@@ -454,14 +416,37 @@ type SortKey = 'item_name' | 'category' | 'retail_price_container' | 'wholesale_
 type SortDir = 'asc' | 'desc';
 
 export default function Inventory() {
-    const items = useLiveQuery(() => db.getItems(getFirmId())) || [];
-    const allBrands = useLiveQuery(() => db.getBrands()) || [];
-    const allProducts = useLiveQuery(() => DAL.products.getAll()) || [];
-    const packingUnits = useLiveQuery(() => db.getPackingUnits()) || [];
-    const allVP1 = useLiveQuery(() => DAL.variant_params_1.getAll()) || [];
-    const allVP2 = useLiveQuery(() => DAL.variant_params_2.getAll()) || [];
-    const allVP3 = useLiveQuery(() => DAL.variant_params_3.getAll()) || [];
+    const queryClient = useQueryClient();
     const addToast = useAppStore((s) => s.addToast);
+
+    const { data: items = [] } = useQuery({
+        queryKey: ['items'],
+        queryFn: () => DAL.items.getAll(),
+    });
+    const { data: allBrands = [] } = useQuery({
+        queryKey: ['brands'],
+        queryFn: () => DAL.brands.getAll(),
+    });
+    const { data: allProducts = [] } = useQuery({
+        queryKey: ['products'],
+        queryFn: () => DAL.products.getAll(),
+    });
+    const { data: packingUnits = [] } = useQuery({
+        queryKey: ['packing_units'],
+        queryFn: () => DAL.packing_units.getAll(),
+    });
+    const { data: allVP1 = [] } = useQuery({
+        queryKey: ['variant_params_1'],
+        queryFn: () => DAL.variant_params_1.getAll(),
+    });
+    const { data: allVP2 = [] } = useQuery({
+        queryKey: ['variant_params_2'],
+        queryFn: () => DAL.variant_params_2.getAll(),
+    });
+    const { data: allVP3 = [] } = useQuery({
+        queryKey: ['variant_params_3'],
+        queryFn: () => DAL.variant_params_3.getAll(),
+    });
 
     const [showModal, setShowModal] = useState(false);
     const [showBulkInsert, setShowBulkInsert] = useState(false);
@@ -475,37 +460,37 @@ export default function Inventory() {
     // Lookup maps
     const brandMap = useMemo(() => {
         const m = new Map<number, string>();
-        allBrands.forEach((b) => m.set(b.id!, b.name));
+        allBrands.forEach((b: any) => m.set(b.id!, b.name));
         return m;
     }, [allBrands]);
 
     const productMap = useMemo(() => {
         const m = new Map<number, string>();
-        allProducts.forEach((p) => m.set(p.id!, p.name));
+        allProducts.forEach((p: any) => m.set(p.id!, p.name));
         return m;
     }, [allProducts]);
 
     const packingNameMap = useMemo(() => {
         const m = new Map<number, string>();
-        packingUnits.forEach((pu) => m.set(pu.id!, pu.unit_name));
+        packingUnits.forEach((pu: any) => m.set(pu.id!, pu.unit_name));
         return m;
     }, [packingUnits]);
 
     const vp1Map = useMemo(() => {
         const m = new Map<number, string>();
-        allVP1.forEach((v) => m.set(v.id!, v.name));
+        allVP1.forEach((v: any) => m.set(v.id!, v.name));
         return m;
     }, [allVP1]);
 
     const vp2Map = useMemo(() => {
         const m = new Map<number, string>();
-        allVP2.forEach((v) => m.set(v.id!, v.name));
+        allVP2.forEach((v: any) => m.set(v.id!, v.name));
         return m;
     }, [allVP2]);
 
     const vp3Map = useMemo(() => {
         const m = new Map<number, string>();
-        allVP3.forEach((v) => m.set(v.id!, v.name));
+        allVP3.forEach((v: any) => m.set(v.id!, v.name));
         return m;
     }, [allVP3]);
 
@@ -514,9 +499,9 @@ export default function Inventory() {
         if (!searchQuery.trim()) return items;
         const q = searchQuery.toLowerCase();
         return items.filter(
-            (i) =>
+            (i: any) =>
                 i.item_name.toLowerCase().includes(q) ||
-                i.category.toLowerCase().includes(q) ||
+                i.category?.toLowerCase().includes(q) ||
                 (i.brand_id && (brandMap.get(i.brand_id) || '').toLowerCase().includes(q)) ||
                 (i.product_id && (productMap.get(i.product_id) || '').toLowerCase().includes(q)) ||
                 (i.variant_param1_id && (vp1Map.get(i.variant_param1_id) || '').toLowerCase().includes(q))
@@ -525,7 +510,7 @@ export default function Inventory() {
 
     // Sort
     const sorted = useMemo(() => {
-        return [...filtered].sort((a, b) => {
+        return [...filtered].sort((a: any, b: any) => {
             const av = a[sortKey] ?? '';
             const bv = b[sortKey] ?? '';
             if (typeof av === 'number' && typeof bv === 'number') {
@@ -539,8 +524,8 @@ export default function Inventory() {
     // Group by product name — always on, product name shown as header row
     const grouped = useMemo(() => {
         if (!groupByProduct) return null;
-        const map = new Map<string, Item[]>();
-        sorted.forEach((item) => {
+        const map = new Map<string, any[]>();
+        sorted.forEach((item: any) => {
             const groupKey = item.product_id ? productMap.get(item.product_id) || 'Uncategorized' : 'Uncategorized';
             if (!map.has(groupKey)) map.set(groupKey, []);
             map.get(groupKey)!.push(item);
@@ -568,7 +553,8 @@ export default function Inventory() {
 
     const handleDelete = async (id: number) => {
         if (!confirm('Delete this item?')) return;
-        await db.deleteItem(id);
+        await DAL.items.delete(id);
+        queryClient.invalidateQueries({ queryKey: ['items'] });
         addToast('Item deleted', 'success');
     };
 
@@ -587,26 +573,24 @@ export default function Inventory() {
     };
 
     // Stock display — total packages (p_unit_per_parcel × parcels), with total units
-    const stockDisplay = (item: Item) => {
+    const stockDisplay = (item: any) => {
         const puName = item.packing_unit_id ? packingNameMap.get(item.packing_unit_id) || '' : '';
         const totalPkgs = item.p_unit_per_parcel * item.stock_parcels * item.p_unit;
         return (
             <span>
-
                 <span className={item.stock_parcels <= 5 ? 'text-red-600 font-semibold' : 'font-medium'}>
                     {item.stock_parcels} parcels
                 </span>
                 {puName && <span className="text-surface-400 text-xs ml-0.5"></span>}
                 <span className="text-surface-400 text-xs ml-1">({totalPkgs} {puName})</span>
-
             </span>
         );
     };
 
     // Stats
     const totalItems = items.length;
-    const lowStock = items.filter((i) => i.stock_parcels <= 5).length;
-    const totalValue = items.reduce((sum, i) => sum + i.retail_price_container * i.stock_parcels, 0);
+    const lowStock = items.filter((i: any) => i.stock_parcels <= 5).length;
+    const totalValue = items.reduce((sum: number, i: any) => sum + i.retail_price_container * i.stock_parcels, 0);
 
     const sortIcon = (key: SortKey) => {
         if (sortKey !== key) return '';
@@ -618,7 +602,7 @@ export default function Inventory() {
 
     const COL_SPAN = 9;
 
-    const renderItemRow = (item: Item) => (
+    const renderItemRow = (item: any) => (
         <tr key={item.id} className="border-b border-surface-200 hover:bg-surface-50 transition-colors">
             <td className="px-3 py-2.5 text-surface-700">{item.item_name}</td>
             <td className="px-3 py-2.5 text-surface-500">{item.variant_param1_id ? vp1Map.get(item.variant_param1_id) || '-' : '-'}</td>

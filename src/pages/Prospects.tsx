@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { useLiveQuery } from '@/db/local/hooks';
-import * as db from '@/db/local/queries';
-import { getFirmId } from '@/db/dal';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { DAL } from '@/db/dal';
 import type { Prospect } from '@/db/types';
 import { useAppStore } from '@/store/store';
 import { Plus, Search, Pencil, Trash2, X, MapPin, Phone, Building } from 'lucide-react';
 
 function ProspectModal({ prospect, onClose }: { prospect: Prospect | null; onClose: () => void }) {
     const addToast = useAppStore((s) => s.addToast);
+    const queryClient = useQueryClient();
     const [form, setForm] = useState<Partial<Prospect>>(
         prospect || { prospectname: '', area_town: '', contact: '', business_type: '', notes: '' }
     );
@@ -19,12 +19,13 @@ function ProspectModal({ prospect, onClose }: { prospect: Prospect | null; onClo
         }
         try {
             if (prospect?.id) {
-                await db.updateProspect(prospect.id, form);
+                await DAL.prospects.update(prospect.id, form);
                 addToast('Prospect updated', 'success');
             } else {
-                await db.insertProspect(getFirmId(), { ...form, createdAt: new Date().toISOString() } as Prospect);
+                await DAL.prospects.add(form);
                 addToast('Prospect added', 'success');
             }
+            queryClient.invalidateQueries({ queryKey: ['prospects'] });
             onClose();
         } catch {
             addToast('Save failed', 'error');
@@ -72,7 +73,12 @@ function ProspectModal({ prospect, onClose }: { prospect: Prospect | null; onClo
 }
 
 export default function Prospects() {
-    const prospects = useLiveQuery(() => db.getProspects(getFirmId())) || [];
+    const queryClient = useQueryClient();
+    const { data: prospects = [] } = useQuery({
+        queryKey: ['prospects'],
+        queryFn: () => DAL.prospects.getAll(),
+    });
+    
     const addToast = useAppStore((s) => s.addToast);
     const [search, setSearch] = useState('');
     const [showModal, setShowModal] = useState(false);
@@ -87,7 +93,8 @@ export default function Prospects() {
 
     const handleDelete = async (id: number) => {
         if (confirm('Delete this prospect?')) {
-            await db.deleteProspect(id);
+            await DAL.prospects.delete(id);
+            queryClient.invalidateQueries({ queryKey: ['prospects'] });
             addToast('Prospect deleted', 'info');
         }
     };
