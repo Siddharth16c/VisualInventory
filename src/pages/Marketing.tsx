@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
-import { useSupabaseLiveQuery } from '@/hooks/useLiveQuery';
+import { useState, useMemo } from 'react';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 import { DAL } from '@/db/dal';
 import { useAppStore } from '@/store/store';
 import { jsPDF } from 'jspdf';
@@ -19,10 +19,10 @@ export default function Marketing() {
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
     // Data — from Supabase via DAL
-    const items = useSupabaseLiveQuery(useCallback(() => DAL.items.getAll(), []), [], ['items']);
-    const verticals = useSupabaseLiveQuery(useCallback(() => DAL.verticals.getAll(), []), [], ['verticals']);
-    const brands = useSupabaseLiveQuery(useCallback(() => DAL.brands.getAll(), []), [], ['brands']);
-    const products = useSupabaseLiveQuery(useCallback(() => DAL.products.getAll(), []), [], ['products']);
+    const items = useSupabaseQuery(['items'], () => DAL.items.getAll(), []);
+    const verticals = useSupabaseQuery(['verticals'], () => DAL.verticals.getAll(), []);
+    const brands = useSupabaseQuery(['brands'], () => DAL.brands.getAll(), []);
+    const products = useSupabaseQuery(['products'], () => DAL.products.getAll(), []);
 
     // Filter
     const filteredItems = useMemo(() => {
@@ -130,7 +130,7 @@ export default function Marketing() {
 
             const catalogueItems: CatalogueItem[] = await Promise.all(filteredItems.map(async (item: any) => {
                 let media: any[] = [];
-                try { media = await DAL.product_media.getByItem(item.id!); } catch { /* no media */ }
+                try { media = await DAL.item_media.getByItem(item.id!); } catch { /* no media */ }
                 const vert = verticals.find((v: any) => v.id === item.vertical_id);
                 const brand = brands.find((b: any) => b.id === item.brand_id);
                 const product = products.find((p: any) => p.id === item.product_id);

@@ -2,6 +2,7 @@ import { useLocation } from 'react-router-dom';
 import { useAppStore } from '@/store/store';
 import { Menu, Wifi, WifiOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { FirmSwitcher } from '@/components/FirmSwitcher'; // Adjust path if needed
 
 const pageTitles: Record<string, string> = {
     '/billing': 'Orders & Billing',
@@ -16,7 +17,15 @@ const pageTitles: Record<string, string> = {
     '/settings': 'Settings',
 };
 
-export default function Header() {
+// Define the props coming from App.tsx
+interface HeaderProps {
+    showFirmSwitcher?: boolean;
+    firms?: any[]; // Replace 'any' with your Firm type if available
+    currentFirmId?: string;
+    onSwitch?: (firmId: string) => void;
+}
+
+export default function Header({ showFirmSwitcher, firms, currentFirmId, onSwitch }: HeaderProps) {
     const location = useLocation();
     const activeBusiness = useAppStore((s) => s.activeBusiness);
     const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -32,22 +41,34 @@ export default function Header() {
         };
     }, []);
 
-    const title = pageTitles[location.pathname] || 'VisualOS';
-
     return (
-        <header className="no-print flex items-center gap-4 border-b border-surface-300 px-4 py-3 lg:px-6 bg-white">
-            <button
-                onClick={() => useAppStore.getState().toggleSidebar()}
-                className="btn-ghost p-2 lg:hidden"
-            >
-                <Menu className="h-5 w-5" />
-            </button>
+        <header className="no-print flex items-center justify-between w-full border-b border-surface-300 px-4 py-3 lg:px-6 bg-white h-[60px]">
 
-            <h2 className="text-lg font-semibold text-surface-900">{title}</h2>
+            {/* --- LEFT SIDE: Menu & Firm Switcher --- */}
+            <div className="flex items-center gap-4 flex-shrink-0">
+                <button
+                    onClick={() => useAppStore.getState().toggleSidebar()}
+                    className="btn-ghost p-2 lg:hidden"
+                >
+                    <Menu className="h-5 w-5" />
+                </button>
 
-            <div className="ml-auto flex items-center gap-3">
+                {/* Inject the actual FirmSwitcher component here */}
+                {showFirmSwitcher && firms && onSwitch && (
+                    <div className="w-[200px]"> {/* Optional wrapper to control width */}
+                        <FirmSwitcher
+                            firms={firms}
+                            currentFirmId={currentFirmId ?? null}
+                            onSwitch={onSwitch}
+                        />
+                    </div>
+                )}
+            </div>
+
+            {/* --- RIGHT SIDE: Firm Label & App Status --- */}
+            <div className="flex items-center gap-3 flex-shrink-0 pl-4">
                 {/* Firm name badge */}
-                <span className="hidden sm:inline text-xs font-medium text-surface-500 bg-surface-100 px-2.5 py-1 rounded-full truncate max-w-[180px]">
+                <span className="hidden sm:inline text-xs font-medium text-surface-500 bg-surface-100 px-2.5 py-1 rounded-full max-w-[180px] truncate">
                     {activeBusiness}
                 </span>
 
@@ -61,6 +82,7 @@ export default function Header() {
                     <span className="hidden sm:inline">{isOnline ? 'Online' : 'Offline'}</span>
                 </div>
             </div>
+
         </header>
     );
 }

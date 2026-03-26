@@ -4,7 +4,11 @@
  * Instead of auth credentials, the active firm is determined by the hostname.
  * Each firm gets its own subdomain (or the main domain for master admin).
  *
- * This config is the single source of truth for firm identity.
+ * Real Firm UUIDs (from DB):
+ * - Master HQ:           11111111-1111-1111-1111-111111111111
+ * - R.S. Enterprises:    33b0fa7a-217c-4c85-982e-e5301906bda7
+ * - Kailash Fataka:      a41012cc-d643-41ea-a0f4-7bb5c1f08a51
+ * - Kartik Traders:      be17178e-4f92-4392-83de-1bfccdae1ff3
  */
 
 export interface FirmConfig {
@@ -17,44 +21,44 @@ export interface FirmConfig {
 // ── Firm Registry ────────────────────────────────────────────────
 // Map hostnames to firm configs. Add new firms here.
 const FIRM_MAP: Record<string, FirmConfig> = {
-    // Production subdomains
-    'firma.kailash.observer': {
-        firmId: 'firm-a',
+    // Master admin — main domain
+    'app.kailash.observer': {
+        firmId: '11111111-1111-1111-1111-111111111111',
+        firmName: 'Master HQ',
+        role: 'master_admin',
+        slug: 'master-hq',
+    },
+    'www.app.kailash.observer': {
+        firmId: '11111111-1111-1111-1111-111111111111',
+        firmName: 'Master HQ',
+        role: 'master_admin',
+        slug: 'master-hq',
+    },
+
+    // Firm subdomains
+    'rs.kailash.observer': {
+        firmId: '33b0fa7a-217c-4c85-982e-e5301906bda7',
         firmName: 'R.S. Enterprises',
         role: 'store_owner',
         slug: 'rs-enterprises',
     },
-    'firmb.kailash.observer': {
-        firmId: 'firm-b',
+    'kailash.kailash.observer': {
+        firmId: 'a41012cc-d643-41ea-a0f4-7bb5c1f08a51',
         firmName: 'Kailash Cutlery',
         role: 'store_owner',
         slug: 'kailash-cutlery',
     },
-    'firmc.kailash.observer': {
-        firmId: 'firm-c',
+    'kartik.kailash.observer': {
+        firmId: 'be17178e-4f92-4392-83de-1bfccdae1ff3',
         firmName: 'Kartik Traders',
         role: 'store_owner',
         slug: 'kartik-traders',
-    },
-
-    // Master admin — main domain
-    'app.kailash.observer': {
-        firmId: 'master',
-        firmName: 'VisualInventory Admin',
-        role: 'master_admin',
-        slug: 'admin',
-    },
-    'www.app.kailash.observer': {
-        firmId: 'master',
-        firmName: 'VisualInventory Admin',
-        role: 'master_admin',
-        slug: 'admin',
     },
 };
 
 // ── Default (localhost / dev) ────────────────────────────────────
 const DEFAULT_FIRM: FirmConfig = {
-    firmId: 'firm-a',
+    firmId: '33b0fa7a-217c-4c85-982e-e5301906bda7',
     firmName: 'R.S. Enterprises',
     role: 'master_admin', // dev gets full access
     slug: 'rs-enterprises',
@@ -88,4 +92,11 @@ export function resolveFirmFromURL(): FirmConfig {
  */
 export function isMasterAdmin(): boolean {
     return resolveFirmFromURL().role === 'master_admin';
+}
+
+/**
+ * Get all configured firms (for admin panel)
+ */
+export function getAllFirmConfigs(): FirmConfig[] {
+    return Object.values(FIRM_MAP);
 }

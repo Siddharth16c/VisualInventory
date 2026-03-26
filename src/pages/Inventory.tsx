@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Item } from '@/db/dexie';
+import { useLiveQuery } from '@/db/local/hooks';
+import * as db from '@/db/local/queries';
+import { DAL, getFirmId } from '@/db/dal';
+import type { Item } from '@/db/types';
 import { useAppStore } from '@/store/store';
 import { Plus, Pencil, Trash2, Search, ChevronRight, ChevronDown, X, Package, Upload } from 'lucide-react';
 import BulkInsertModal from '@/components/BulkInsertModal';
@@ -63,13 +65,13 @@ function ItemModal({
     onClose: () => void;
 }) {
     const addToast = useAppStore((s) => s.addToast);
-    const verticals = useLiveQuery(() => db.verticals.toArray()) || [];
-    const allProducts = useLiveQuery(() => db.products.toArray()) || [];
-    const allBrands = useLiveQuery(() => db.brands.toArray()) || [];
-    const packingUnits = useLiveQuery(() => db.packing_units.toArray()) || [];
-    const allVP1 = useLiveQuery(() => db.variant_params_1.toArray()) || [];
-    const allVP2 = useLiveQuery(() => db.variant_params_2.toArray()) || [];
-    const allVP3 = useLiveQuery(() => db.variant_params_3.toArray()) || [];
+    const verticals = useLiveQuery(() => db.getVerticals()) || [];
+    const allProducts = useLiveQuery(() => DAL.products.getAll()) || [];
+    const allBrands = useLiveQuery(() => db.getBrands()) || [];
+    const packingUnits = useLiveQuery(() => db.getPackingUnits()) || [];
+    const allVP1 = useLiveQuery(() => DAL.variant_params_1.getAll()) || [];
+    const allVP2 = useLiveQuery(() => DAL.variant_params_2.getAll()) || [];
+    const allVP3 = useLiveQuery(() => DAL.variant_params_3.getAll()) || [];
 
     const [form, setForm] = useState({
         item_name: item?.item_name || '',
@@ -82,7 +84,7 @@ function ItemModal({
         variant_param2_id: item?.variant_param2_id ?? 0,
         variant_param3_id: item?.variant_param3_id ?? 0,
         p_unit: item?.p_unit ?? 1,
-        P_unit_per_parcel: item?.P_unit_per_parcel ?? 1,
+        p_unit_per_parcel: item?.p_unit_per_parcel ?? 1,
         retail_price_unit: item?.retail_price_unit ?? '',
         retail_price_container: item?.retail_price_container ?? '',
         wholesale_price_unit: item?.wholesale_price_unit ?? '',
@@ -137,16 +139,16 @@ function ItemModal({
         }
     }, [form.retail_price_unit, form.wholesale_price_unit, selectedMultiplier]);
 
-    // Auto-compute stock_units: p_unit × P_unit_per_parcel × parcels
+    // Auto-compute stock_units: p_unit × p_unit_per_parcel × parcels
     useEffect(() => {
         const pUnit = Number(form.p_unit) || 1;
-        const pkgQty = Number(form.P_unit_per_parcel) || 1;
+        const pkgQty = Number(form.p_unit_per_parcel) || 1;
         const parcels = Number(form.stock_parcels) || 0;
         setForm((f) => ({
             ...f,
             stock_units: pUnit * pkgQty * parcels,
         }));
-    }, [form.stock_parcels, form.p_unit, form.P_unit_per_parcel]);
+    }, [form.stock_parcels, form.p_unit, form.p_unit_per_parcel]);
 
     const handleCategoryChange = (cat: string) => {
         const vert = verticals.find((v) => v.name === cat);
@@ -188,7 +190,7 @@ function ItemModal({
             return;
         }
 
-        const data: Omit<Item, 'id'> = {
+        const data: Omit<Item, 'id' | 'firm_id'> = {
             item_name: form.item_name.trim(),
             category: form.category,
             product_id: form.product_id || undefined,
@@ -199,23 +201,30 @@ function ItemModal({
             variant_param2_id: form.variant_param2_id || undefined,
             variant_param3_id: form.variant_param3_id || undefined,
             p_unit: Number(form.p_unit) || 1,
-            P_unit_per_parcel: Number(form.P_unit_per_parcel) || 1,
+            p_unit_per_parcel: Number(form.p_unit_per_parcel) || 1,
             retail_price_unit: Number(form.retail_price_unit) || 0,
             retail_price_container: Number(form.retail_price_container) || 0,
             wholesale_price_unit: Number(form.wholesale_price_unit) || 0,
             wholesale_price_container: Number(form.wholesale_price_container) || 0,
             mrp: Number(form.mrp) || 0,
+            purchase_price_unit: 0,
+            reorder_threshold: 0,
             stock_parcels: Number(form.stock_parcels) || 0,
             stock_units: Number(form.stock_units) || 0,
-            createdAt: item?.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            created_at: item?.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
         };
 
-        if (item?.id) {
-            await db.items.update(item.id, data);
+        const editingId = item?.id;
+        if (editingId) {
+            // Remove readonly fields and created_at before update
+            const updateData = { ...data } as Partial<Item>;
+            delete updateData.created_at;
+            delete updateData.metadata;
+            await db.updateItem(editingId, { ...updateData, updated_at: new Date().toISOString() });
             addToast('Item updated', 'success');
         } else {
-            await db.items.add(data);
+            await db.insertItem(getFirmId(), data as any);
             addToast('Item added', 'success');
         }
         onClose();
@@ -255,7 +264,7 @@ function ItemModal({
                         <InlineAdd
                             placeholder="New Category"
                             onAdd={async (name) => {
-                                await db.verticals.add({ name });
+                                await db.insertVertical(getFirmId(), { name });
                                 addToast(`Category "${name}" added`, 'success');
                             }}
                         />
@@ -274,7 +283,7 @@ function ItemModal({
                             <InlineAdd
                                 placeholder="New Product"
                                 onAdd={async (name) => {
-                                    await db.products.add({ name, category: form.category, vertical_id: form.vertical_id || undefined });
+                                    await db.insertProduct(getFirmId(), { name, category: form.category, vertical_id: form.vertical_id || undefined });
                                     addToast(`Product "${name}" added`, 'success');
                                 }}
                             />
@@ -300,7 +309,7 @@ function ItemModal({
                             <InlineAdd
                                 placeholder="New Size"
                                 onAdd={async (name) => {
-                                    await db.variant_params_1.add({ name, product_id: form.product_id || undefined });
+                                    await db.insertVariantParam(getFirmId(), 'variant_params_1', { name, product_id: form.product_id || undefined });
                                     addToast(`Variant "${name}" added`, 'success');
                                 }}
                             />
@@ -318,7 +327,7 @@ function ItemModal({
                             <InlineAdd
                                 placeholder="New Type"
                                 onAdd={async (name) => {
-                                    await db.variant_params_2.add({ name, product_id: form.product_id || undefined });
+                                    await db.insertVariantParam(getFirmId(), 'variant_params_2', { name, product_id: form.product_id || undefined });
                                     addToast(`Variant "${name}" added`, 'success');
                                 }}
                             />
@@ -336,7 +345,7 @@ function ItemModal({
                             <InlineAdd
                                 placeholder="New Size"
                                 onAdd={async (name) => {
-                                    await db.variant_params_3.add({ name, product_id: form.product_id || undefined });
+                                    await db.insertVariantParam(getFirmId(), 'variant_params_3', { name, product_id: form.product_id || undefined });
                                     addToast(`Size "${name}" added`, 'success');
                                 }}
                             />
@@ -356,7 +365,7 @@ function ItemModal({
                             placeholder="New Brand"
                             onAdd={async (name) => {
                                 if (!form.vertical_id) { addToast('Select a category first', 'error'); return; }
-                                await db.brands.add({ name, vertical_id: form.vertical_id });
+                                await db.insertBrand(getFirmId(), { name, vertical_id: form.vertical_id });
                                 addToast(`Brand "${name}" added`, 'success');
                             }}
                         />
@@ -375,7 +384,7 @@ function ItemModal({
                             placeholder="e.g. box-10"
                             onAdd={async (name) => {
                                 const mult = parseInt(name.replace(/\D/g, '')) || 1;
-                                await db.packing_units.add({ unit_name: name, multiplier: mult });
+                                await db.insertPackingUnit(getFirmId(), { unit_name: name, multiplier: mult });
                                 addToast(`Packing "${name}" (×${mult}) added`, 'success');
                             }}
                         />
@@ -421,12 +430,12 @@ function ItemModal({
                     </h3>
                     <div className="grid grid-cols-4 gap-3">
                         {numField('p_unit', 'p_unit', '12')}
-                        {numField('P_unit_per_parcel', 'P_unit_per_parcel', '1')}
+                        {numField('p_unit_per_parcel', 'p_unit_per_parcel', '1')}
                         {numField('Parcels', 'stock_parcels', '0')}
                         {numField('Total Units', 'stock_units', '0', true)}
                     </div>
                     <p className="text-xs text-surface-400">
-                        Total = p_unit × P_unit_per_parcel × parcels ({Number(form.p_unit) || 1} × {Number(form.P_unit_per_parcel) || 1} × {Number(form.stock_parcels) || 0} = {Number(form.stock_units) || 0})
+                        Total = p_unit × p_unit_per_parcel × parcels ({Number(form.p_unit) || 1} × {Number(form.p_unit_per_parcel) || 1} × {Number(form.stock_parcels) || 0} = {Number(form.stock_units) || 0})
                     </p>
                 </div>
 
@@ -445,13 +454,13 @@ type SortKey = 'item_name' | 'category' | 'retail_price_container' | 'wholesale_
 type SortDir = 'asc' | 'desc';
 
 export default function Inventory() {
-    const items = useLiveQuery(() => db.items.toArray()) || [];
-    const allBrands = useLiveQuery(() => db.brands.toArray()) || [];
-    const allProducts = useLiveQuery(() => db.products.toArray()) || [];
-    const packingUnits = useLiveQuery(() => db.packing_units.toArray()) || [];
-    const allVP1 = useLiveQuery(() => db.variant_params_1.toArray()) || [];
-    const allVP2 = useLiveQuery(() => db.variant_params_2.toArray()) || [];
-    const allVP3 = useLiveQuery(() => db.variant_params_3.toArray()) || [];
+    const items = useLiveQuery(() => db.getItems(getFirmId())) || [];
+    const allBrands = useLiveQuery(() => db.getBrands()) || [];
+    const allProducts = useLiveQuery(() => DAL.products.getAll()) || [];
+    const packingUnits = useLiveQuery(() => db.getPackingUnits()) || [];
+    const allVP1 = useLiveQuery(() => DAL.variant_params_1.getAll()) || [];
+    const allVP2 = useLiveQuery(() => DAL.variant_params_2.getAll()) || [];
+    const allVP3 = useLiveQuery(() => DAL.variant_params_3.getAll()) || [];
     const addToast = useAppStore((s) => s.addToast);
 
     const [showModal, setShowModal] = useState(false);
@@ -559,7 +568,7 @@ export default function Inventory() {
 
     const handleDelete = async (id: number) => {
         if (!confirm('Delete this item?')) return;
-        await db.items.delete(id);
+        await db.deleteItem(id);
         addToast('Item deleted', 'success');
     };
 
@@ -577,10 +586,10 @@ export default function Inventory() {
         return `Rs.${(containerPrice || unitPrice).toFixed(2)}`;
     };
 
-    // Stock display — total packages (P_unit_per_parcel × parcels), with total units
+    // Stock display — total packages (p_unit_per_parcel × parcels), with total units
     const stockDisplay = (item: Item) => {
         const puName = item.packing_unit_id ? packingNameMap.get(item.packing_unit_id) || '' : '';
-        const totalPkgs = item.P_unit_per_parcel * item.stock_parcels * item.p_unit;
+        const totalPkgs = item.p_unit_per_parcel * item.stock_parcels * item.p_unit;
         return (
             <span>
 

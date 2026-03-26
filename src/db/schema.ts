@@ -149,7 +149,7 @@ export const visits = sqliteTable('visits', {
 
 // ─── Media & Extras ────────────────────────────────────────────────
 
-export const product_media = sqliteTable('product_media', {
+export const item_media = sqliteTable('item_media', {
     id: integer('id').primaryKey({ autoIncrement: true }),
     item_id: integer('item_id').notNull().references(() => items.id),
     media_role: text('media_role').notNull(), // 'primary' | 'gallery' | 'flipbook' | 'gif' | 'video'

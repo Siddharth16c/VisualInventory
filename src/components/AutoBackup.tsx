@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '@/db/dexie';
+import { exportDatabaseFile } from '@/db/local/db';
 import { useAppStore } from '@/store/store';
 import { Download, X, AlertTriangle, Loader2 } from 'lucide-react';
 import { downloadBlob } from '@/utils/share';
@@ -11,17 +11,15 @@ export default function AutoBackup() {
 
     useEffect(() => {
         const checkBackup = () => {
+            if (localStorage.getItem('visualOS_backupDisabled') === 'true') return;
+            const snoozeUntil = localStorage.getItem('visualOS_backupSnoozeUntil');
+            if (snoozeUntil && Date.now() < Number(snoozeUntil)) return;
             const lastBackupStr = localStorage.getItem('visualOS_lastBackupDate');
             const today = new Date().toISOString().split('T')[0];
-
-            // If we've never backed up, or the last backup wasn't today
             if (!lastBackupStr || lastBackupStr !== today) {
-                // Show prompt after a short delay so it doesn't interrupt immediate use
-                setTimeout(() => setShowPrompt(true), 15000);
+                setTimeout(() => setShowPrompt(true), 30000);
             }
         };
-
-        // Delay the initial check slightly when the component mounts
         const timer = setTimeout(checkBackup, 5000);
         return () => clearTimeout(timer);
     }, []);
@@ -29,36 +27,7 @@ export default function AutoBackup() {
     const handleBackup = async () => {
         setIsExporting(true);
         try {
-            const backup: Record<string, any[]> = {};
-
-            const tableNames = [
-                'items', 'products', 'prospects', 'orders', 'order_items',
-                'travel_records', 'visits', 'costs', 'account',
-                'marketing_catalogues', 'verticals', 'brands',
-                'packing_units', 'variant_params_1', 'variant_params_2', 'variant_params_3', 'bills', 'business_config',
-            ];
-
-            for (const name of tableNames) {
-                const table = (db as any)[name];
-                if (table) {
-                    backup[name] = await table.toArray();
-                }
-            }
-
-            // Handle product_media separately
-            const mediaItems = await db.product_media.toArray();
-            backup['product_media'] = await Promise.all(
-                mediaItems.map(async (m) => {
-                    const arrayBuffer = await (m.data as Blob).arrayBuffer();
-                    const base64 = btoa(
-                        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-                    );
-                    return { ...m, data: base64, _blob_encoded: true };
-                })
-            );
-
-            const json = JSON.stringify(backup, null, 2);
-            const blob = new Blob([json], { type: 'application/json' });
+            const blob = await exportDatabaseFile();
 
             // Generate filename with timestamp
             const dateStr = new Date().toISOString().split('T')[0];
@@ -76,8 +45,14 @@ export default function AutoBackup() {
     };
 
     const handleDismiss = () => {
-        // Still prompt them next time they open the app today (unless they specifically mute it, but we'll be persistent for safety)
-        // We'll just dismiss for this session.
+        // Snooze for 3 days
+        const snoozeMs = 3 * 24 * 60 * 60 * 1000;
+        localStorage.setItem('visualOS_backupSnoozeUntil', String(Date.now() + snoozeMs));
+        setShowPrompt(false);
+    };
+
+    const handleDisable = () => {
+        localStorage.setItem('visualOS_backupDisabled', 'true');
         setShowPrompt(false);
     };
 
@@ -106,7 +81,7 @@ export default function AutoBackup() {
                         className="btn-ghost flex-1 text-xs px-3 py-2"
                         disabled={isExporting}
                     >
-                        Remind Later
+                        Snooze 3 Days
                     </button>
                     <button
                         onClick={handleBackup}
@@ -117,6 +92,12 @@ export default function AutoBackup() {
                         {isExporting ? 'Exporting...' : 'Download Backup'}
                     </button>
                 </div>
+                <button
+                    onClick={handleDisable}
+                    className="w-full text-center text-[10px] text-surface-500 hover:text-surface-400 mt-1 transition-colors"
+                >
+                    Don't show again
+                </button>
             </div>
         </div>
     );

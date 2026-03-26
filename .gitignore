@@ -1,1 +1,69 @@
+# Dependencies
 node_modules
+.pnpm-store
+
+# Build output
+dist
+build
+.vite
+
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs
+
+# Testing
+coverage
+.nyc_output
+
+# Temp files
+*.tmp
+*.temp
+.cache
+
+# Generated files
+*.generated.*
+
+# Supabase
+.supabase
+
+# Drizzle migrations (keep schema, ignore generated)
+drizzle/meta
+
+# Local development
+.local
+*.local.ts
+*.local.js
+
+# Backup files
+*.backup
+*.bak
+
+# Large data files
+*.sql.gz
+*.zip
+*.tar.gz
+
+# Seed data (optional - uncomment if you don't want to track)
+docs/seed.sql
+scripts/seed.ts
