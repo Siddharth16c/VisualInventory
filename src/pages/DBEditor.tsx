@@ -54,9 +54,9 @@ const TABLE_COLUMNS: Record<string, ColDef[]> = {
         { name: 'product_id', header: 'Product', type: 'select', fkTable: 'products', fkLabel: 'name', width: 160 },
         { name: 'brand_id', header: 'Brand', type: 'select', fkTable: 'brands', fkLabel: 'name', width: 140 },
         { name: 'vertical_id', header: 'Vertical', type: 'select', fkTable: 'verticals', fkLabel: 'name', width: 140 },
-        { name: 'variant_param1_id', header: 'Size', type: 'select', fkTable: 'variant_params_1', fkLabel: 'name', width: 120 },
+        { name: 'variant_param1_id', header: 'packaging name', type: 'select', fkTable: 'variant_params_1', fkLabel: 'name', width: 120 },
         { name: 'variant_param2_id', header: 'Frequency', type: 'select', fkTable: 'variant_params_2', fkLabel: 'name', width: 120 },
-        { name: 'variant_param3_id', header: 'Spec', type: 'select', fkTable: 'variant_params_3', fkLabel: 'name', width: 120 },
+        { name: 'variant_param3_id', header: 'other spec', type: 'select', fkTable: 'variant_params_3', fkLabel: 'name', width: 120 },
         { name: 'thumbnail_base64', header: 'Thumbnail', type: 'text', width: 120 },
     ],
     stock_details: [
@@ -286,7 +286,6 @@ export default function DBEditor() {
     const deleteRow = (rowKey: string) => {
         const row = rows.find((r) => String(r._key) === rowKey);
         if (!row) return;
-        if (row.id && !confirm('Delete this row permanently?')) return;
         (async () => {
             if (row.id) {
                 try { await (DAL as any)[selectedTable].delete(row.id); }
@@ -677,14 +676,7 @@ export default function DBEditor() {
 
 
 
-            {/* ── Status Bar ───────────────────────────────────────── */}
-            <div className="flex items-center gap-4 px-3 py-1.5 border-t border-surface-200 text-[11px] text-surface-500 flex-shrink-0 bg-surface-50">
-                <span><span className="text-red-400">*</span> Required</span>
-                <span>Click cell to edit · Tab to move · Enter to confirm</span>
-
-                <span><Copy className="inline h-3 w-3" /> duplicates row</span>
-                {isDirty && <span className="text-amber-600 font-medium ml-auto">● Unsaved changes</span>}
-            </div>
+          
 
             {/* ── Paste Rows Modal ──────────────────────────────────── */}
             {showPasteModal && (
