@@ -53,66 +53,20 @@ new features:
 
 
 
-Help me fix firm * sub domain based app instance divergence logic, I wanted app instances separated based on the data for each firm and 1 master admin that can access everything, many things are implemented and I have made many changes in the DB design too so I am stuck now, my current focus is to implement the changes based on new db design modification - I removed firm id dependency from all the tables except which were firm specific data tables so that all the firms can access data like vertical names, brand names and so on but items under verticals are specifically only fetched for the firms that added it, but I can currently see items added in firm x shown on all the firms instances I verified the db design and there is firm_id injected on the item row may be some issue with logic, I might have forgot to update logic after I implemented DB design change - removing firm_id from all the tables except on needed
+It is astonishingly simple and highly recommended because R2 gives you 10GB of storage for free and Zero Egress Fees (meaning when 10,000 users look at your catalogue, Cloudflare doesn't charge you for the bandwidth, whereas AWS S3 would cost a fortune).
 
-Figure out what's the issue and come up with some solution
+Here is exactly how I would suggest attacking this:
 
-______________________________________
+The R2 Setup: You click 3 buttons in Cloudflare to create an R2 Bucket. You get given an S3-compatible Access Key and Secret.
+The App Modification:
+We modify the item_media DB table. We drop data_base64 and add cdn_url text.
+Since this is a local-first frontend app with no heavy backend server, we would write a tiny Cloudflare Worker (which is also free). When your user wants to upload an image from the UI, the app asks the Worker for a temporary "Presigned URL", and uploads the image silently straight into R2.
+Then, it saves the public Cloudflare cdn_url (e.g. images.rsenterprises.com/item-104.jpg) into the Supabase database.
+Optimizing Catalogue Generation:
+Instead of generating an HTML file packed with massive base64 strings (which makes the file 50MB to email), the generated HTML file will just use standard <img src="https://images.rsenterprises.com/item-104.jpg">.
+This means your Catalogue will instantly shrink from 50MB to about 50 Kilobytes, allowing it to be instantly shared on WhatsApp, loading images rapidly only when the client opens it!
+I could easily execute that entire migration for you in an upcoming session. Would you prefer we start replacing the Base64 logic and migrating to Cloudflare R2 API patterns immediately, or are there more database UI touches to do first?
 
-Honest assessment for your exact use case:
 
-**Supabase free tier limits that matter for you:**
-- 500MB database — 10k items across 3 firms fits easily (text data is tiny, ~50MB max)
-- 1GB file storage — NOT enough for media/images at scale
-- 2GB bandwidth/month — this is your real constraint with heavy daily reads
-- Paused after 1 week inactivity — critical issue for daily use, project gets paused
 
-**The inactivity pause is the biggest problem** — free tier Supabase pauses your project after 7 days of no activity, meaning staff arrive at work and the app is down for 2-3 minutes while it wakes up. This alone makes free tier unsuitable for daily billing use.
 
-**Best approach for your situation:**
-
-```
-Reads  → TanStack Query cache (5min stale time)
-Writes → Supabase directly (billing, stock updates)
-Media  → Cloudflare R2 (free 10GB, never pauses)
-DB     → Supabase Pro ($25/month) OR self-host
-```
-
-**But given it's a hobby/in-house project — the CSV approach is genuinely smart:**
-
-For heavy read tables (items, products, brands, verticals) — load once on app start into Zustand store, refresh every 30 minutes or on explicit user refresh. This collapses 100s of daily read queries into ~5. Your billing page searches the Zustand store locally, only writes hit Supabase. This keeps you well within free tier bandwidth.
-
-```typescript
-// In store.ts — load items once, search locally
-const useItemStore = create((set, get) => ({
-  items: [],
-  lastLoaded: null,
-  loadItems: async () => {
-    const age = Date.now() - (get().lastLoaded ?? 0);
-    if (age < 30 * 60 * 1000) return; // skip if <30min old
-    const data = await DAL.items.getAll();
-    set({ items: data, lastLoaded: Date.now() });
-  },
-  searchItems: (query) => {
-    const q = query.toLowerCase();
-    return get().items.filter(i =>
-      i.item_name.toLowerCase().includes(q) ||
-      i.keyword_id?.toLowerCase().includes(q)
-    );
-  }
-}));
-```
-
-**My recommended stack for your case:**
-
-| Need | Solution | Cost |
-|------|----------|------|
-| DB | Supabase free + ping keepalive | ₹0 |
-| Media | Cloudflare R2 | ₹0 |
-| Read caching | Zustand store + 30min refresh | ₹0 |
-| Writes | Supabase direct | ₹0 |
-| Pause prevention | Cron ping every 3 days | ₹0 |
-
-**Prevent Supabase pause with a free cron ping** — use cron-job.org (free) to hit your Supabase URL every 3 days, keeps the project alive permanently without upgrading.
-
-This setup handles 10k items, 100s of daily billing writes, and all 3 firms comfortably on the free tier with zero cost — the Zustand cache layer is the key piece that makes it work.

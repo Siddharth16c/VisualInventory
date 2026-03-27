@@ -10,8 +10,9 @@ export interface CatalogueItem {
     variant1?: string;
     variant2?: string;
     description?: string;
-    retail_price?: number;
-    wholesale_price?: number;
+    price_per_unit?: number;
+    price_per_parcel?: number;
+    qty_per_parcel?: number;
     media: ItemMedia[];
 }
 
@@ -26,8 +27,9 @@ export interface BusinessProfile {
 
 export interface CatalogueConfig {
     title?: string;
+    note?: string;
     showPrices?: boolean;
-    priceType?: 'retail' | 'wholesale' | 'both';
+    priceMode?: 'lean' | 'bulk';
 }
 
 export const generateFlipbookHtml = async (
@@ -37,8 +39,9 @@ export const generateFlipbookHtml = async (
 ): Promise<string> => {
     const { 
         title = `${profile.business_name} Catalogue`,
+        note = '',
         showPrices = true,
-        priceType = 'retail'
+        priceMode = 'lean'
     } = config;
     const processedItems = items.map(item => ({
         ...item,
@@ -102,6 +105,7 @@ export const generateFlipbookHtml = async (
         .cover-content { position: relative; z-index: 1; }
         .business-name { font-size: 3.5rem; font-weight: 300; letter-spacing: 2px; margin-bottom: 10px; }
         .catalogue-title { font-size: 1.2rem; text-transform: uppercase; letter-spacing: 4px; color: var(--accent); margin-bottom: 30px; }
+        .catalogue-note { font-size: 1rem; opacity: 0.9; margin-bottom: 30px; max-width: 600px; margin-left: auto; margin-right: auto; line-height: 1.5; white-space: pre-wrap; font-style: italic; }
         .contact-info { font-size: 0.9rem; opacity: 0.8; }
 
         .grid {
@@ -209,6 +213,12 @@ export const generateFlipbookHtml = async (
             color: var(--primary);
         }
         
+        .price-sub {
+            font-size: 0.8rem;
+            color: var(--text-light);
+            font-weight: 400;
+        }
+        
         .price-label { font-size: 0.7rem; font-weight: 400; color: var(--text-light); margin-right: 2px; }
 
         .lightbox {
@@ -296,6 +306,7 @@ export const generateFlipbookHtml = async (
         <div class="cover-content">
             <h1 class="business-name">${profile.business_name}</h1>
             <div class="catalogue-title">${title} • ${date}</div>
+            ${note ? `<div class="catalogue-note">${note}</div>` : ''}
             <div class="contact-info">
                 ${profile.address ? `<p>${profile.address}</p>` : ''}
                 ${profile.contact ? `<p>Tel: ${profile.contact}</p>` : ''}
@@ -331,17 +342,10 @@ export const generateFlipbookHtml = async (
                         <div class="variants">
                             ${item.variant1 ? item.variant1 : ''} ${item.variant2 ? '• ' + item.variant2 : ''}
                         </div>
-                        ${priceType === 'retail' && item.retail_price
-                            ? `<div class="price"><span class="price-label">MRP</span>₹${item.retail_price}</div>`
-                            : priceType === 'wholesale' && item.wholesale_price
-                                ? `<div class="price wholesale"><span class="price-label">WS</span>₹${item.wholesale_price}</div>`
-                                : priceType === 'both' && (item.retail_price || item.wholesale_price)
-                                    ? `<div class="prices">
-                                        ${item.retail_price ? `<div class="price"><span class="price-label">MRP</span>₹${item.retail_price}</div>` : ''}
-                                        ${item.wholesale_price ? `<div class="price wholesale" style="margin-top: 4px;"><span class="price-label">WS</span>₹${item.wholesale_price}</div>` : ''}
-                                       </div>`
-                                    : ''
-                        }
+                        <div class="prices" style="text-align: right;">
+                            <div class="price"><span class="price-label">₹</span>${item.price_per_parcel} <span class="price-label" style="margin-left:2px">/ Parcel</span></div>
+                            <div class="price-sub">₹${item.price_per_unit}/unit • ${item.qty_per_parcel} qty/parcel</div>
+                        </div>
                     </div>
                     ` : ''}
                 </div>
