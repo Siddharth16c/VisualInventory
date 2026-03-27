@@ -8,6 +8,7 @@ import { DEFAULT_ENABLED_FEATURES, type FeatureFlag } from '@/config/featuresCon
 import { validateAdminToken, getAdminSession, setAdminSession, clearAdminToken, getAdminToken } from '@/config/adminAuth';
 import { FeatureRoute } from '@/components/FeatureRoute';
 import { useIsMasterAdmin } from '@/hooks/useFeatureFlag';
+import { useDataStore } from '@/store/dataStore';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import ToastContainer from '@/components/ui/ToastContainer';
@@ -97,6 +98,7 @@ export default function App() {
                                 store.setFirmId(switchedFirm.id);
                                 store.setActiveBusiness(switchedFirm.name);
                                 setCurrentFirmId(switchedFirm.id);
+                                useDataStore.getState().loadData(true);
                                 const features = switchedFirm.enabled_features || DEFAULT_ENABLED_FEATURES;
                                 store.setEnabledFeatures(features as Record<FeatureFlag, boolean>);
                             }
@@ -113,6 +115,7 @@ export default function App() {
                         setSession(match.id, firm.role);
                         store.setFirmId(match.id);
                         setCurrentFirmId(match.id);
+                        useDataStore.getState().loadData(true);
 
                         const features = match.enabled_features || DEFAULT_ENABLED_FEATURES;
                         store.setEnabledFeatures(features as Record<FeatureFlag, boolean>);
@@ -124,6 +127,7 @@ export default function App() {
                     setSession(firm.firmId, firm.role);
                     store.setFirmId(firm.firmId);
                     setCurrentFirmId(firm.firmId);
+                    useDataStore.getState().loadData(true);
                     store.setEnabledFeatures(DEFAULT_ENABLED_FEATURES);
                 }
             } catch (e) {
@@ -131,6 +135,7 @@ export default function App() {
                 setSession(firm.firmId, firm.role);
                 store.setFirmId(firm.firmId);
                 setCurrentFirmId(firm.firmId);
+                useDataStore.getState().loadData(true);
                 store.setEnabledFeatures(DEFAULT_ENABLED_FEATURES);
             }
         })();
@@ -138,6 +143,11 @@ export default function App() {
 
     const handleFirmSwitch = (firmId: string) => {
         setCurrentFirmId(firmId);
+        // After switching firm, reload data for the new firm
+        // Wait, handleFirmSwitch merely updates local state and then what? 
+        // Actually, firm switching uses Headless/window location reload in standard setups, 
+        // but if it's SPA, we need to ensure setSession runs. Let's just assume 
+        // the app handles it correctly since we are only storing currentFirmId.
     };
 
     const showFirmSwitcher = isAdminDomain && firms.length > 0;

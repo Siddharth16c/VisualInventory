@@ -65,7 +65,7 @@ export default function VerticalSidebar({
       const vid = item.vertical_id ?? 'general';
       counts.set(vid, (counts.get(vid) || 0) + 1);
       if (item.vertical_id) {
-        counts.set(item.vertical_id, (counts.get(item.vertical_id) || 0) + 1);
+        counts.set(item.vertical_id, (counts.get(item.vertical_id) || 0) );
       }
     });
     

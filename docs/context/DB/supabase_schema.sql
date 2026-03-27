@@ -37,19 +37,25 @@ CREATE TABLE public.categories (
   name text NOT NULL,
   CONSTRAINT categories_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.cost_types (
+  id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+  cost_type_name text NOT NULL,
+  CONSTRAINT cost_types_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.costs (
   id bigint NOT NULL DEFAULT nextval('costs_id_seq'::regclass),
   firm_id uuid NOT NULL,
-  cost_type text NOT NULL,
   amount numeric NOT NULL DEFAULT 0,
   description text,
   date date NOT NULL,
   sales_order_id bigint,
   purchase_order_id bigint,
+  cost_type_id bigint,
   CONSTRAINT costs_pkey PRIMARY KEY (id),
   CONSTRAINT costs_firm_id_fkey FOREIGN KEY (firm_id) REFERENCES public.firms(id),
   CONSTRAINT costs_sales_order_id_fkey FOREIGN KEY (sales_order_id) REFERENCES public.sales_orders(id),
-  CONSTRAINT costs_purchase_order_id_fkey FOREIGN KEY (purchase_order_id) REFERENCES public.purchase_orders(id)
+  CONSTRAINT costs_purchase_order_id_fkey FOREIGN KEY (purchase_order_id) REFERENCES public.purchase_orders(id),
+  CONSTRAINT costs_cost_type_id_fkey FOREIGN KEY (cost_type_id) REFERENCES public.cost_types(id)
 );
 CREATE TABLE public.firm_users (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -190,12 +196,10 @@ CREATE TABLE public.prospects (
 CREATE TABLE public.purchase_log (
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   purchase_date timestamp with time zone NOT NULL DEFAULT now(),
-  purchase_id bigint NOT NULL,
   total_amount numeric NOT NULL,
   supplier_id bigint,
   shipment_date timestamp with time zone NOT NULL,
   CONSTRAINT purchase_log_pkey PRIMARY KEY (id),
-  CONSTRAINT purchase_log_purchase_id_fkey FOREIGN KEY (purchase_id) REFERENCES public.purchase_orders(id),
   CONSTRAINT purchase_log_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id)
 );
 CREATE TABLE public.purchase_orders (
@@ -203,9 +207,11 @@ CREATE TABLE public.purchase_orders (
   firm_id uuid NOT NULL,
   purchase_rate numeric NOT NULL,
   item_keyword text NOT NULL,
+  purchase_log_id bigint,
   CONSTRAINT purchase_orders_pkey PRIMARY KEY (id),
   CONSTRAINT purchase_orders_firm_id_fkey FOREIGN KEY (firm_id) REFERENCES public.firms(id),
-  CONSTRAINT purchase_orders_item_keyword_fkey FOREIGN KEY (item_keyword) REFERENCES public.items(keyword_id)
+  CONSTRAINT purchase_orders_item_keyword_fkey FOREIGN KEY (item_keyword) REFERENCES public.items(keyword_id),
+  CONSTRAINT purchase_orders_purchase_log_id_fkey FOREIGN KEY (purchase_log_id) REFERENCES public.purchase_log(id)
 );
 CREATE TABLE public.routes (
   id bigint NOT NULL DEFAULT nextval('routes_id_seq'::regclass),

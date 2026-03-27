@@ -9,6 +9,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DAL } from '@/db/dal';
 import { useAppStore } from '@/store/store';
+import { useDataStore } from '@/store/dataStore';
 import type { Item, Prospect, Vertical, Brand, Subcategory, Order } from '@/db/types';
 
 // Components
@@ -46,11 +47,14 @@ export default function Billing() {
   const paidAmount = useAppStore((s) => s.taxRate);
   const setPaidAmount = useAppStore((s) => s.setTaxRate);
 
-  // Data fetching
-  const { data: items = [] } = useQuery({
-    queryKey: ['items'],
-    queryFn: () => DAL.items.getAll(),
-  });
+  // Data fetching - heavy read tables come from Zustand store (cached 30m)
+  const items = useDataStore((s) => s.items);
+  const verticals = useDataStore((s) => s.verticals);
+  
+  // ensure store has loaded data (non-blocking)
+  useEffect(() => {
+    useDataStore.getState().loadData();
+  }, []);
 
   const { data: prospects = [] } = useQuery({
     queryKey: ['prospects'],
@@ -60,11 +64,6 @@ export default function Billing() {
   const { data: orders = [], refetch: refetchOrders } = useQuery({
     queryKey: ['orders'],
     queryFn: () => DAL.sales_orders.getAll(),
-  });
-
-  const { data: verticals = [] } = useQuery({
-    queryKey: ['verticals'],
-    queryFn: () => DAL.verticals.getAll(),
   });
 
   // Create order
