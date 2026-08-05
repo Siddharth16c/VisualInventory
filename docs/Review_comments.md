@@ -46,3 +46,27 @@ whether we can gather records based on item_id(fk) in stock_details table and fo
 _______
 new features:
 1. Daily task manager - sprint board(list of tasks); list of workers/identities; today's tasks arranged in hierarchy
+
+
+
+
+
+
+
+It is astonishingly simple and highly recommended because R2 gives you 10GB of storage for free and Zero Egress Fees (meaning when 10,000 users look at your catalogue, Cloudflare doesn't charge you for the bandwidth, whereas AWS S3 would cost a fortune).
+
+Here is exactly how I would suggest attacking this:
+
+The R2 Setup: You click 3 buttons in Cloudflare to create an R2 Bucket. You get given an S3-compatible Access Key and Secret.
+The App Modification:
+We modify the item_media DB table. We drop data_base64 and add cdn_url text.
+Since this is a local-first frontend app with no heavy backend server, we would write a tiny Cloudflare Worker (which is also free). When your user wants to upload an image from the UI, the app asks the Worker for a temporary "Presigned URL", and uploads the image silently straight into R2.
+Then, it saves the public Cloudflare cdn_url (e.g. images.rsenterprises.com/item-104.jpg) into the Supabase database.
+Optimizing Catalogue Generation:
+Instead of generating an HTML file packed with massive base64 strings (which makes the file 50MB to email), the generated HTML file will just use standard <img src="https://images.rsenterprises.com/item-104.jpg">.
+This means your Catalogue will instantly shrink from 50MB to about 50 Kilobytes, allowing it to be instantly shared on WhatsApp, loading images rapidly only when the client opens it!
+I could easily execute that entire migration for you in an upcoming session. Would you prefer we start replacing the Base64 logic and migrating to Cloudflare R2 API patterns immediately, or are there more database UI touches to do first?
+
+
+
+

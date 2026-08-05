@@ -25,6 +25,7 @@ export default function Catalogue() {
     const brands = useSupabaseQuery(['brands'], () => DAL.brands.getAll(), []) as Brand[];
     const products = useSupabaseQuery(['products'], () => DAL.products.getAll(), []) as Product[];
     const allMedia = useSupabaseQuery(['item_media'], () => DAL.item_media.getAll(), []) as ItemMedia[];
+    const allStockDetails = useSupabaseQuery(['stock_details'], () => (DAL as any).stock_details.getAll(), []) as any[];
 
     const filteredItems = useMemo(() => {
         return items.filter(item => {
@@ -43,7 +44,7 @@ export default function Catalogue() {
     const [catalogueConfig, setCatalogueConfig] = useState<CatalogueConfig>({
         title: activeBusiness || 'Product Catalogue',
         showPrices: true,
-        priceType: 'retail'
+        priceMode: 'lean'
     });
 
     const addToDraft = (item: Item) => {
@@ -83,15 +84,24 @@ export default function Catalogue() {
                 
                 // Get media for this item from item_media table
                 const itemMedia = allMedia.filter(m => m.item_id === item.id);
+                const sd = allStockDetails.find(s => s.item_id === item.id);
+                const unitMultiplier = sd ? Number(sd.unit_multiplier) || 1 : 1;
+                const packMultiplier = sd ? Number(sd.pack_multiplier) || 1 : 1;
+                const qtyPerParcel = unitMultiplier * packMultiplier;
+                
+                const unitPrice = catalogueConfig.priceMode === 'lean' ? (sd?.retail_unit_price ?? 0) : (sd?.wholesale_unit_price ?? 0);
+                const pricePerParcel = Number((unitPrice * qtyPerParcel).toFixed(2));
 
                 return {
                     id: item.id!,
                     item_name: item.item_name,
-                    category: item.category,
+                    category: item.category || '',
                     product_name: product?.name,
                     brand_name: brand?.name,
                     vertical_name: vert?.name,
-                    retail_price: item.retail_price_container || item.retail_price_unit,
+                    price_per_unit: unitPrice,
+                    price_per_parcel: pricePerParcel,
+                    qty_per_parcel: qtyPerParcel,
                     media: itemMedia,
                 };
             });
@@ -242,15 +252,14 @@ export default function Catalogue() {
                         
                         {catalogueConfig.showPrices && (
                             <div>
-                                <label className="text-xs font-medium text-surface-600 mb-1 block">Price Type</label>
+                                <label className="text-xs font-medium text-surface-600 mb-1 block">Price Mode</label>
                                 <select
                                     className="input-field text-sm"
-                                    value={catalogueConfig.priceType}
-                                    onChange={(e) => setCatalogueConfig({ ...catalogueConfig, priceType: e.target.value as 'retail' | 'wholesale' | 'both' })}
+                                    value={catalogueConfig.priceMode}
+                                    onChange={(e) => setCatalogueConfig({ ...catalogueConfig, priceMode: e.target.value as 'lean' | 'bulk' })}
                                 >
-                                    <option value="retail">Retail (MRP)</option>
-                                    <option value="wholesale">Wholesale</option>
-                                    <option value="both">Both</option>
+                                    <option value="lean">Lean (Retail)</option>
+                                    <option value="bulk">Bulk (Wholesale)</option>
                                 </select>
                             </div>
                         )}

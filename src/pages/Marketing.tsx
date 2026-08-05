@@ -18,21 +18,56 @@ export default function Marketing() {
     const [catalogueDate, setCatalogueDate] = useState(new Date().toISOString().split('T')[0]);
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
+    // NEW STATES
+    const [customTitle, setCustomTitle] = useState('');
+    const [customNote, setCustomNote] = useState('');
+    const [priceMode, setPriceMode] = useState<'lean' | 'bulk'>('lean');
+    const [deselectedItems, setDeselectedItems] = useState<Set<number>>(new Set());
+
     // Data — from Supabase via DAL
     const items = useSupabaseQuery(['items'], () => DAL.items.getAll(), []);
     const verticals = useSupabaseQuery(['verticals'], () => DAL.verticals.getAll(), []);
     const brands = useSupabaseQuery(['brands'], () => DAL.brands.getAll(), []);
     const products = useSupabaseQuery(['products'], () => DAL.products.getAll(), []);
+    const stockDetails = useSupabaseQuery(['stock_details'], () => DAL.stock_details.getAll(), []);
+
+    const toggleItemSelection = (id: number) => {
+        setDeselectedItems(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
 
     // Filter
     const filteredItems = useMemo(() => {
-        if (!searchQuery.trim()) return items;
-        const q = searchQuery.toLowerCase();
-        return items.filter(i =>
-            i.item_name.toLowerCase().includes(q) ||
-            i.category.toLowerCase().includes(q)
-        );
-    }, [items, searchQuery]);
+        let res = items;
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase();
+            res = res.filter(i =>
+                i.item_name.toLowerCase().includes(q) ||
+                (typeof i.category === 'string' && i.category.toLowerCase().includes(q))
+            );
+        }
+
+        return res.map(item => {
+            const sd = stockDetails.find((s: any) => s.item_id === item.id);
+            const unitMultiplier = sd ? Number(sd.unit_multiplier) || 1 : 1;
+            const packMultiplier = sd ? Number(sd.pack_multiplier) || 1 : 1;
+            const qtyPerParcel = unitMultiplier * packMultiplier;
+            
+            const unitPrice = priceMode === 'lean' ? (sd?.retail_unit_price ?? 0) : (sd?.wholesale_unit_price ?? 0);
+            const pricePerParcel = Number((unitPrice * qtyPerParcel).toFixed(2));
+            
+            return {
+                ...item,
+                pricePerUnit: unitPrice,
+                pricePerParcel,
+                qtyPerParcel
+            };
+        });
+    }, [items, searchQuery, stockDetails, priceMode]);
 
     // Group by Vertical → Brand
     const grouped = useMemo(() => {
@@ -59,6 +94,8 @@ export default function Marketing() {
         const ph = doc.internal.pageSize.getHeight();
         let y = 20;
 
+        const reportTitle = customTitle.trim() || (activeBusiness || 'Price List');
+
         // Watermark
         doc.setFontSize(60);
         doc.setTextColor(240, 240, 240);
@@ -68,19 +105,29 @@ export default function Marketing() {
         // Header
         doc.setFontSize(18);
         doc.setFont('helvetica', 'bold');
-        doc.text(activeBusiness || 'Price List', pw / 2, y, { align: 'center' });
+        doc.text(reportTitle, pw / 2, y, { align: 'center' });
         y += 8;
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Date: ${catalogueDate}`, pw / 2, y, { align: 'center' });
-        y += 12;
+        doc.text(`Date: ${catalogueDate}  •  Pricing: ${priceMode === 'lean' ? 'Lean / Retail' : 'Bulk / Wholesale'}`, pw / 2, y, { align: 'center' });
+        y += 8;
+
+        if (customNote.trim()) {
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(80, 80, 80);
+            const lines = doc.splitTextToSize(customNote.trim(), pw - 40);
+            doc.text(lines, pw / 2, y, { align: 'center' });
+            y += (lines.length * 4) + 4;
+            doc.setTextColor(0, 0, 0);
+        }
 
         // Columns
         const cols = [
-            { x: 14, w: 80, label: 'Item' },
-            { x: 94, w: 40, label: 'Brand' },
-            { x: 134, w: 35, label: 'Price/Unit ₹' },
-            { x: 169, w: 35, label: 'Price/Pkg ₹' },
+            { x: 14, w: 75, label: 'Item' },
+            { x: 94, w: 25, label: 'Price/Unit ₹' },
+            { x: 124, w: 25, label: 'Qty/Parcel' },
+            { x: 154, w: 25, label: 'Price/Parcel ₹' }
         ];
 
         // Header row
@@ -95,6 +142,10 @@ export default function Marketing() {
 
         // Items grouped by vertical
         grouped.forEach((brandMap, vertName) => {
+            let hasItems = false;
+            brandMap.forEach(items => { if (items.some((i: any) => !deselectedItems.has(i.id))) hasItems = true; });
+            if (!hasItems) return;
+
             // Vertical header
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(10);
@@ -104,14 +155,18 @@ export default function Marketing() {
             y += 8;
 
             brandMap.forEach((brandItems, brandName) => {
-                brandItems.forEach(item => {
+                const selectedBrandItems = brandItems.filter((i: any) => !deselectedItems.has(i.id));
+                if (selectedBrandItems.length === 0) return;
+
+                selectedBrandItems.forEach((item: any) => {
                     if (y > ph - 20) { doc.addPage(); y = 15; }
                     doc.setFont('helvetica', 'normal');
                     doc.setFontSize(8);
-                    doc.text(item.item_name.substring(0, 40), 14, y);
-                    doc.text(brandName.substring(0, 20), 94, y);
-                    doc.text(String(item.retail_price_unit || 0), 134, y);
-                    doc.text(String(item.retail_price_container || 0), 169, y);
+                    const nameStr = `${item.item_name} ${brandName !== 'Unbranded' ? `(${brandName})` : ''}`;
+                    doc.text(nameStr.substring(0, 50), 14, y);
+                    doc.text(String(item.pricePerUnit), 94, y);
+                    doc.text(String(item.qtyPerParcel), 124, y);
+                    doc.text(String(item.pricePerParcel), 154, y);
                     y += 5.5;
                 });
             });
@@ -123,12 +178,13 @@ export default function Marketing() {
 
     // ── Generate Full Catalogue (HTML flipbook) ──
     const handleGenerateCatalogue = async (shareMode: 'download' | 'share') => {
-        if (filteredItems.length === 0) { addToast('No items to generate', 'error'); return; }
+        const itemsToGenerate = filteredItems.filter(i => !deselectedItems.has(i.id));
+        if (itemsToGenerate.length === 0) { addToast('No items to generate', 'error'); return; }
         setIsGenerating(true);
         try {
             const profile: BusinessProfile = { business_name: activeBusiness || 'My Business' };
 
-            const catalogueItems: CatalogueItem[] = await Promise.all(filteredItems.map(async (item: any) => {
+            const catalogueItems: CatalogueItem[] = await Promise.all(itemsToGenerate.map(async (item: any) => {
                 let media: any[] = [];
                 try { media = await DAL.item_media.getByItem(item.id!); } catch { /* no media */ }
                 const vert = verticals.find((v: any) => v.id === item.vertical_id);
@@ -141,13 +197,18 @@ export default function Marketing() {
                     product_name: product?.name,
                     brand_name: brand?.name,
                     vertical_name: vert?.name,
-                    retail_price: item.retail_price_container || item.retail_price_unit,
-                    wholesale_price: item.wholesale_price_container || item.wholesale_price_unit,
+                    price_per_unit: item.pricePerUnit,
+                    price_per_parcel: item.pricePerParcel,
+                    qty_per_parcel: item.qtyPerParcel,
                     media,
                 };
             }));
 
-            const html = await generateFlipbookHtml(catalogueItems, profile);
+            const html = await generateFlipbookHtml(catalogueItems, profile, {
+                title: customTitle.trim() || undefined,
+                note: customNote.trim() || undefined,
+                priceMode: priceMode
+            });
             const blob = new Blob([html], { type: 'text/html' });
             const filename = `Catalogue-${catalogueDate}.html`;
 
@@ -233,6 +294,43 @@ export default function Marketing() {
                 </button>
             </div>
 
+            {/* Header Settings */}
+            <div className="flex gap-4 p-4 glass rounded-xl flex-wrap items-start">
+                <div className="flex-1 min-w-[200px] flex flex-col gap-2">
+                    <input 
+                        className="input-field px-3 py-2 text-sm font-semibold border-brand-200" 
+                        placeholder="Custom Title (e.g. Festival Offers)..." 
+                        value={customTitle} 
+                        onChange={e => setCustomTitle(e.target.value)} 
+                    />
+                    <textarea 
+                        className="input-field px-3 py-2 text-xs resize-none h-[60px] border-brand-200" 
+                        placeholder="Add a contextual note/description to display on the catalogue..." 
+                        value={customNote} 
+                        onChange={e => setCustomNote(e.target.value)} 
+                    />
+                </div>
+
+                <div className="flex flex-col gap-3 min-w-[200px]">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-surface-600">Pricing Mode:</span>
+                        <div className="flex rounded-lg overflow-hidden border border-surface-300 shadow-sm">
+                            <button onClick={() => setPriceMode('lean')}
+                                className={`px-4 py-1 text-xs font-medium transition-colors ${priceMode === 'lean' ? 'bg-emerald-600 text-white' : 'bg-white text-surface-600 hover:bg-surface-50'}`}>
+                                Lean (Retail)
+                            </button>
+                            <button onClick={() => setPriceMode('bulk')}
+                                className={`px-4 py-1 text-xs font-medium transition-colors ${priceMode === 'bulk' ? 'bg-violet-600 text-white' : 'bg-white text-surface-600 hover:bg-surface-50'}`}>
+                                Bulk (WS)
+                            </button>
+                        </div>
+                    </div>
+                    <div className="text-[10px] text-surface-400">
+                        {priceMode === 'lean' ? 'Uses Retail Pricing' : 'Uses Wholesale Pricing'}
+                    </div>
+                </div>
+            </div>
+
             {/* Search */}
             <div className="relative max-w-lg">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-400" />
@@ -240,12 +338,13 @@ export default function Marketing() {
             </div>
 
             {/* Info bar */}
-            <div className="flex items-center gap-3 text-xs text-surface-500">
-                <span>{filteredItems.length} items</span>
+            <div className="flex items-center gap-3 text-[11px] text-surface-500 bg-surface-100 p-2 rounded-lg">
+                <span className="font-semibold text-brand-600">{filteredItems.filter(i => !deselectedItems.has(i.id)).length} selected</span>
+                <span>/</span>
+                <span>{filteredItems.length} total items</span>
                 <span>·</span>
-                <span>Grouped by Vertical → Brand</span>
-                {mode === 'catalogue' && <span className="flex items-center gap-1"><Image className="h-3 w-3" /> Includes images & full specs</span>}
-                {mode === 'prices' && <span>Price/Unit + Price/Package (no MRP)</span>}
+                {mode === 'catalogue' && <span className="flex items-center gap-1"><Image className="h-3 w-3" /> Includes images & specs</span>}
+                {mode === 'prices' && <span>Prices Only (No Images)</span>}
             </div>
 
             {/* Items grouped */}
@@ -272,24 +371,33 @@ export default function Marketing() {
                                         </div>
                                         {/* Item rows */}
                                         <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="bg-surface-50/80 border-b border-surface-100">
+                                                    <th className="px-6 py-1 text-left w-10"></th>
+                                                    <th className="px-2 py-1 text-left text-[11px] font-semibold text-surface-500">Item</th>
+                                                    <th className="px-3 py-1 text-left text-[11px] font-semibold text-surface-500">Category</th>
+                                                    <th className="px-3 py-1 text-right text-[11px] font-semibold text-surface-500">Price/Unit</th>
+                                                    <th className="px-3 py-1 text-right text-[11px] font-semibold text-surface-500">Qty/Parcel</th>
+                                                    <th className="px-3 py-1 text-right text-[11px] font-semibold text-surface-500">Price/Parcel</th>
+                                                </tr>
+                                            </thead>
                                             <tbody>
-                                                {brandItems.map(item => (
-                                                    <tr key={item.id} className="hover:bg-surface-50 border-t border-surface-50">
-                                                        <td className="px-6 py-2 text-surface-900 font-medium">{item.item_name}</td>
-                                                        <td className="px-3 py-2 text-surface-500 text-xs">{item.category}</td>
-                                                        <td className="px-3 py-2 text-right text-surface-700">
-                                                            <span className="text-xs text-surface-400 mr-1">unit:</span>
-                                                            ₹{item.retail_price_unit || 0}
-                                                        </td>
-                                                        <td className="px-3 py-2 text-right text-surface-900 font-medium">
-                                                            <span className="text-xs text-surface-400 mr-1">pkg:</span>
-                                                            ₹{item.retail_price_container || 0}
-                                                        </td>
-                                                        <td className="px-3 py-2 text-right text-surface-400 text-xs w-[80px]">
-                                                            {item.stock_parcels} in stock
-                                                        </td>
-                                                    </tr>
-                                                ))}
+                                                {brandItems.map(item => {
+                                                    const isSelected = !deselectedItems.has(item.id);
+                                                    return (
+                                                        <tr key={item.id} className={`hover:bg-brand-50/50 border-t border-surface-50 transition-colors cursor-pointer ${!isSelected ? 'opacity-40 grayscale' : ''}`}
+                                                            onClick={() => toggleItemSelection(item.id)}>
+                                                            <td className="px-6 py-2 text-brand-600" onClick={(e) => e.stopPropagation()}>
+                                                                <input type="checkbox" checked={isSelected} onChange={() => toggleItemSelection(item.id)} className="w-4 h-4 rounded border-surface-300 accent-brand-600 cursor-pointer" />
+                                                            </td>
+                                                            <td className="px-2 py-2 text-surface-900 font-medium">{item.item_name}</td>
+                                                            <td className="px-3 py-2 text-surface-500 text-[11px] max-w-[120px] truncate">{item.category}</td>
+                                                            <td className="px-3 py-2 text-right text-surface-700">₹{item.pricePerUnit}</td>
+                                                            <td className="px-3 py-2 text-right text-surface-700">{item.qtyPerParcel}</td>
+                                                            <td className="px-3 py-2 text-right text-surface-900 font-bold w-[110px]">₹{item.pricePerParcel}</td>
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>

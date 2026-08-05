@@ -200,7 +200,7 @@ export default function ItemsGridView({
                     <span className="text-sm font-medium text-surface-900 flex-1 text-left">
                       {group.vertical?.name || 'General'}
                     </span>
-                    <span className="text-xs border-slate-700 px-2 py-0.5 rounded-full">
+                    <span className="text-xs text-surface-500 px-2 py-0.5 rounded-full">
                       {group.items.length}
                     </span>
                   </button>

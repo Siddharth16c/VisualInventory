@@ -33,7 +33,6 @@ const TABLE_COLUMNS: Record<string, ColDef[]> = {
     ],
     products: [
         { name: 'name', header: 'Product Name', type: 'text', required: true, width: 200 },
-        { name: 'category', header: 'Category', type: 'text', required: true, width: 150 },
         { name: 'vertical_id', header: 'Vertical', type: 'select', fkTable: 'verticals', fkLabel: 'name', width: 180 },
     ],
     packing_units: [
@@ -50,25 +49,26 @@ const TABLE_COLUMNS: Record<string, ColDef[]> = {
         { name: 'name', header: 'Spec Name', type: 'text', required: true, hint: 'e.g. Single Line, Square Line', width: 260 },
     ],
     items: [
+        { name: 'keyword_id', header: 'Keyword ID', type: 'text', required: true, width: 140 },
         { name: 'item_name', header: 'Item Name', type: 'text', required: true, width: 220 },
         { name: 'product_id', header: 'Product', type: 'select', fkTable: 'products', fkLabel: 'name', width: 160 },
         { name: 'brand_id', header: 'Brand', type: 'select', fkTable: 'brands', fkLabel: 'name', width: 140 },
         { name: 'vertical_id', header: 'Vertical', type: 'select', fkTable: 'verticals', fkLabel: 'name', width: 140 },
-        { name: 'packing_unit_id', header: 'Pack Unit', type: 'select', fkTable: 'packing_units', fkLabel: 'unit_name', width: 120 },
-        { name: 'variant_param1_id', header: 'Size', type: 'select', fkTable: 'variant_params_1', fkLabel: 'name', width: 120 },
+        { name: 'variant_param1_id', header: 'packaging name', type: 'select', fkTable: 'variant_params_1', fkLabel: 'name', width: 120 },
         { name: 'variant_param2_id', header: 'Frequency', type: 'select', fkTable: 'variant_params_2', fkLabel: 'name', width: 120 },
-        { name: 'variant_param3_id', header: 'Spec', type: 'select', fkTable: 'variant_params_3', fkLabel: 'name', width: 120 },
-        { name: 'p_unit', header: 'Qty/Packet', type: 'number', defaultValue: 1, width: 90 },
-        { name: 'p_unit_per_parcel', header: 'Qty/Parcel', type: 'number', defaultValue: 1, width: 90 },
-        { name: 'stock_parcels', header: 'Stock (P)', type: 'number', defaultValue: 0, width: 80 },
-        { name: 'stock_units', header: 'Stock (U)', type: 'number', defaultValue: 0, width: 80 },
-        { name: 'retail_price_unit', header: 'Price/Unit ₹', type: 'number', defaultValue: 0, width: 100 },
-        { name: 'retail_price_container', header: 'Price/Pkg ₹', type: 'number', defaultValue: 0, width: 100 },
-        { name: 'wholesale_price_unit', header: 'WS/Unit ₹', type: 'number', defaultValue: 0, width: 100 },
-        { name: 'wholesale_price_container', header: 'WS/Pkg ₹', type: 'number', defaultValue: 0, width: 100 },
-        { name: 'mrp', header: 'MRP ₹', type: 'number', defaultValue: 0, width: 90 },
-        { name: 'reorder_threshold', header: 'Reorder At', type: 'number', defaultValue: 0, width: 90 },
-        { name: 'purchase_price_unit', header: 'Cost/Unit ₹', type: 'number', defaultValue: 0, width: 100 },
+        { name: 'variant_param3_id', header: 'other spec', type: 'select', fkTable: 'variant_params_3', fkLabel: 'name', width: 120 },
+        { name: 'thumbnail_base64', header: 'Thumbnail', type: 'text', width: 120 },
+    ],
+    stock_details: [
+        { name: 'item_id', header: 'Item', type: 'select', fkTable: 'items', fkLabel: 'item_name', width: 180 },
+        { name: 'unit_multiplier', header: 'Unit Multiplier', type: 'number', required: true, width: 120 },
+        { name: 'unit_multiplier_name', header: 'Unit Name', type: 'text', required: true, width: 120 },
+        { name: 'pack_multiplier', header: 'Pack Multiplier', type: 'number', required: true, width: 120 },
+        { name: 'pack_multiplier_name', header: 'Pack Name', type: 'text', required: true, width: 120 },
+        { name: 'retail_unit_price', header: 'Retail Unit Price', type: 'number', required: true, width: 120 },
+        { name: 'wholesale_unit_price', header: 'Wholesale Unit Price', type: 'number', required: true, width: 120 },
+        { name: 'is_active', header: 'Active?', type: 'text', defaultValue: 'true', width: 100 },
+        { name: 'discount_cap_percent', header: 'Discount Cap %', type: 'number', width: 120 },
     ],
     prospects: [
         { name: 'prospectname', header: 'Customer Name', type: 'text', required: true, width: 200 },
@@ -76,6 +76,7 @@ const TABLE_COLUMNS: Record<string, ColDef[]> = {
         { name: 'contact', header: 'Contact', type: 'text', width: 140 },
         { name: 'business_type', header: 'Type', type: 'text', width: 120 },
         { name: 'route_id', header: 'Route', type: 'select', fkTable: 'routes', fkLabel: 'name', width: 140 },
+        { name: 'notes', header: 'Notes', type: 'text', width: 250 },
     ],
     routes: [
         { name: 'name', header: 'Route Name', type: 'text', required: true, width: 200 },
@@ -86,31 +87,38 @@ const TABLE_COLUMNS: Record<string, ColDef[]> = {
         { name: 'name', header: 'Supplier Name', type: 'text', required: true, width: 200 },
         { name: 'contact', header: 'Contact', type: 'text', width: 150 },
         { name: 'address', header: 'Address', type: 'text', width: 250 },
-        { name: 'vertical_id', header: 'Vertical', type: 'select', fkTable: 'verticals', fkLabel: 'name', width: 150 },
+        { name: 'notes', header: 'Notes', type: 'text', width: 250 },
+    ],
+    cost_types: [
+        { name: 'cost_type_name', header: 'Cost Type', type: 'text', required: true, width: 200 },
     ],
     costs: [
-        { name: 'cost_type', header: 'Cost Type', type: 'text', required: true, width: 160 },
+        { name: 'cost_type_id', header: 'Cost Type', type: 'select', fkTable: 'cost_types', fkLabel: 'cost_type_name', width: 160 },
         { name: 'amount', header: 'Amount ₹', type: 'number', required: true, defaultValue: 0, width: 120 },
         { name: 'description', header: 'Description', type: 'text', width: 250 },
         { name: 'date', header: 'Date', type: 'date', defaultValue: new Date().toISOString().split('T')[0], width: 130 },
+        { name: 'sales_order_id', header: 'Sales Order ID', type: 'number', width: 130 },
+        { name: 'purchase_order_id', header: 'Purchase Order ID', type: 'number', width: 130 },
     ],
-    orders: [
-        { name: 'prospect_name', header: 'Customer', type: 'text', width: 180 },
-        { name: 'status', header: 'Status', type: 'text', width: 100 },
+    sales_orders: [
+        { name: 'prospect_id', header: 'Customer', type: 'select', fkTable: 'prospects', fkLabel: 'prospectname', width: 180 },
         { name: 'grand_total', header: 'Total ₹', type: 'number', width: 100 },
         { name: 'paid_amount', header: 'Paid ₹', type: 'number', width: 100 },
         { name: 'due_amount', header: 'Due ₹', type: 'number', width: 100 },
+        { name: 'end_of_sale', header: 'Ended', type: 'text', width: 80 },
     ],
     bills: [
-        { name: 'bill_number', header: 'Bill #', type: 'text', width: 120 },
-        { name: 'order_id', header: 'Order ID', type: 'number', width: 100 },
-        { name: 'amount', header: 'Amount ₹', type: 'number', width: 120 },
+        { name: 'bill_number', header: 'Bill #', type: 'text', required: true, width: 120 },
+        { name: 'prospect_id', header: 'Customer', type: 'select', fkTable: 'prospects', fkLabel: 'prospectname', width: 180 },
+        { name: 'grand_total', header: 'Amount ₹', type: 'number', required: true, width: 120 },
+        { name: 'paid_amount', header: 'Paid ₹', type: 'number', required: true, width: 120 },
+        { name: 'notes', header: 'Notes', type: 'text', width: 200 },
     ],
     visits: [
         { name: 'prospect_id', header: 'Prospect', type: 'select', fkTable: 'prospects', fkLabel: 'prospectname', width: 180 },
         { name: 'route_id', header: 'Route', type: 'select', fkTable: 'routes', fkLabel: 'name', width: 150 },
         { name: 'visit_date', header: 'Date', type: 'date', width: 130 },
-        { name: 'outcome', header: 'Outcome', type: 'text', width: 200 },
+        { name: 'reason_response', header: 'Reason/Response', type: 'text', width: 200 },
         { name: 'notes', header: 'Notes', type: 'text', width: 250 },
         { name: 'next_visit_plan', header: 'Next Visit', type: 'date', width: 130 },
     ],
@@ -120,10 +128,16 @@ const TABLE_COLUMNS: Record<string, ColDef[]> = {
         { name: 'total_cost', header: 'Cost ₹', type: 'number', width: 120 },
         { name: 'profit', header: 'Profit ₹', type: 'number', width: 120 },
     ],
-    purchase_orders: [
+    purchase_log: [
         { name: 'supplier_id', header: 'Supplier', type: 'select', fkTable: 'suppliers', fkLabel: 'name', width: 180 },
-        { name: 'total_cost', header: 'Total ₹', type: 'number', width: 120 },
-        { name: 'status', header: 'Status', type: 'text', width: 100 },
+        { name: 'total_amount', header: 'Total Amount ₹', type: 'number', required: true, width: 140 },
+        { name: 'purchase_date', header: 'Purchase Date', type: 'date', required: true, width: 130 },
+        { name: 'shipment_date', header: 'Shipment Date', type: 'date', width: 130 },
+    ],
+    purchase_orders: [
+        { name: 'item_keyword', header: 'Item Keyword', type: 'text', required: true, width: 160 },
+        { name: 'purchase_rate', header: 'Rate ₹', type: 'number', required: true, width: 120 },
+        { name: 'purchase_log_id', header: 'Log ID', type: 'number', width: 100 },
     ],
     // ── New location tables ──────────────────────────────────────
     storage_places: [
@@ -150,26 +164,26 @@ const TABLE_COLUMNS: Record<string, ColDef[]> = {
 
 const TABLE_LIST = [
     { group: 'Reference Data', tables: ['verticals', 'brands', 'products', 'packing_units', 'variant_params_1', 'variant_params_2', 'variant_params_3'] },
-    { group: 'Inventory', tables: ['items'] },
+    { group: 'Inventory', tables: ['items', 'stock_details'] },
     { group: 'Locations', tables: ['storage_places', 'storage_zones', 'storage_slots'] },
     { group: 'CRM', tables: ['prospects', 'routes', 'visits'] },
-    { group: 'Sales', tables: ['orders', 'bills'] },
-    { group: 'Procurement', tables: ['suppliers', 'purchase_orders'] },
-    { group: 'Finance', tables: ['costs', 'account'] },
+    { group: 'Sales', tables: ['sales_orders', 'bills'] },
+    { group: 'Procurement', tables: ['suppliers', 'purchase_orders', 'purchase_log'] },
+    { group: 'Finance', tables: ['cost_types', 'costs', 'account'] },
 ];
 
 const EDITABLE_TABLES = new Set([
-    'verticals', 'brands', 'products', 'packing_units', 'items',
-    'prospects', 'routes', 'costs', 'suppliers', 'visits', 'purchase_orders',
+    'verticals', 'brands', 'products', 'packing_units', 'items', 'stock_details',
+    'prospects', 'routes', 'cost_types', 'costs', 'suppliers', 'visits', 'purchase_orders', 'purchase_log',
     'variant_params_1', 'variant_params_2', 'variant_params_3',
-    'storage_places', 'storage_zones', 'storage_slots',
+    'storage_places', 'storage_zones', 'storage_slots', 'sales_orders'
 ]);
 
 const TABLE_LABELS: Record<string, string> = {
     verticals: 'Verticals', brands: 'Brands', products: 'Products', packing_units: 'Packing Units',
-    items: 'Items / SKUs', prospects: 'Prospects', routes: 'Routes', suppliers: 'Suppliers',
-    costs: 'Costs', orders: 'Orders', bills: 'Bills', visits: 'Visits', account: 'Account',
-    purchase_orders: 'Purchase Orders',
+    items: 'Items / SKUs', stock_details: 'Stock & Pricing', prospects: 'Prospects', routes: 'Routes', suppliers: 'Suppliers',
+    cost_types: 'Cost Types', costs: 'Costs', sales_orders: 'Sales Orders', bills: 'Bills', visits: 'Visits', account: 'Account',
+    purchase_orders: 'Purchase Orders', purchase_log: 'Purchase Log',
     variant_params_1: 'Sizes (VP1)', variant_params_2: 'Frequency (VP2)', variant_params_3: 'Specs (VP3)',
     storage_places: 'Storage Places', storage_zones: 'Storage Zones', storage_slots: 'Storage Slots',
 };
@@ -177,7 +191,7 @@ const TABLE_LABELS: Record<string, string> = {
 // Columns that are auto-generated or system-managed — stripped before save
 const SYSTEM_COLS = new Set([
     '_key', 'firm_id', 'created_at', 'updated_at',
-    'keyword_id', 'tsvector_search', 'zone_label', 'slot_label',
+    '_dirty', 'tsvector_search', 'zone_label', 'slot_label',
 ]);
 
 
@@ -246,12 +260,12 @@ export default function DBEditor() {
 
     // ── Cell / row operations (your original logic, unchanged) ────
     const updateCell = (rowKey: string, field: string, val: any) => {
-        setRows((prev) => prev.map((r) => r._key === rowKey ? { ...r, [field]: val } : r));
+        setRows((prev) => prev.map((r) => r._key === rowKey ? { ...r, [field]: val, _dirty: true } : r));
         setIsDirty(true);
     };
 
     const addRow = () => {
-        const newRow: any = { _key: `new-${Date.now()}` };
+        const newRow: any = { _key: `new-${Date.now()}`, _dirty: true };
         colDefs.forEach((c) => { newRow[c.name] = c.defaultValue ?? (c.type === 'number' ? 0 : ''); });
         setRows((prev) => [...prev, newRow]);
         setIsDirty(true);
@@ -262,7 +276,7 @@ export default function DBEditor() {
         const source = rows.find((r) => String(r._key) === rowKey);
         if (!source) return;
         const { _key, id, created_at, updated_at, keyword_id, zone_label, slot_label, ...rest } = source;
-        const dup: any = { ...rest, _key: `new-${Date.now()}` };
+        const dup: any = { ...rest, _key: `new-${Date.now()}`, _dirty: true };
         const idx = rows.findIndex((r) => String(r._key) === rowKey);
         setRows((prev) => { const next = [...prev]; next.splice(idx + 1, 0, dup); return next; });
         setIsDirty(true);
@@ -272,7 +286,6 @@ export default function DBEditor() {
     const deleteRow = (rowKey: string) => {
         const row = rows.find((r) => String(r._key) === rowKey);
         if (!row) return;
-        if (row.id && !confirm('Delete this row permanently?')) return;
         (async () => {
             if (row.id) {
                 try { await (DAL as any)[selectedTable].delete(row.id); }
@@ -304,11 +317,13 @@ export default function DBEditor() {
             const existingRows: any[] = [];
 
             rows.forEach((row) => {
+                if (row.id && !row._dirty) return; // SKIP non-dirty existing rows
+                
                 const out: any = {};
                 for (const [k, v] of Object.entries(row)) {
                     if (SYSTEM_COLS.has(k)) continue;
                     if (k === 'id' && !v) continue; // strip falsy id
-                    out[k] = v;
+                    out[k] = v === '' ? null : v;
                 }
                 if (row.id) {
                     existingRows.push(out);
@@ -331,7 +346,7 @@ export default function DBEditor() {
                 await dal.bulkUpsert(existingRows);
             }
 
-            addToast(`✓ Saved ${rows.length} row${rows.length !== 1 ? 's' : ''}`, 'success');
+            addToast(`✓ Saved ${existingRows.length + newRows.length} modified row(s)`, 'success');
             loadRows();
         } catch (e: any) {
             const msg = e?.message ?? String(e);
@@ -661,14 +676,7 @@ export default function DBEditor() {
 
 
 
-            {/* ── Status Bar ───────────────────────────────────────── */}
-            <div className="flex items-center gap-4 px-3 py-1.5 border-t border-surface-200 text-[11px] text-surface-500 flex-shrink-0 bg-surface-50">
-                <span><span className="text-red-400">*</span> Required</span>
-                <span>Click cell to edit · Tab to move · Enter to confirm</span>
-
-                <span><Copy className="inline h-3 w-3" /> duplicates row</span>
-                {isDirty && <span className="text-amber-600 font-medium ml-auto">● Unsaved changes</span>}
-            </div>
+          
 
             {/* ── Paste Rows Modal ──────────────────────────────────── */}
             {showPasteModal && (

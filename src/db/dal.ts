@@ -53,14 +53,13 @@ export function isMasterAdmin(): boolean {
 
 // Tables that have a NOT NULL firm_id column
 const FIRM_SCOPED_TABLES = new Set([
-    'verticals', 'brands', 'products', 'packing_units', 'items',
-    'prospects', 'sales_orders', 'bills', 'routes', 'visits',
+    'items', 'prospects', 'sales_orders', 'bills', 'routes', 'visits',
     'travel_records', 'purchase_orders', 'item_media',
     'costs', 'account', 'marketing_catalogues', 'warehouse_layout',
     'warehouse_cells', 'stock_movements',
     'storage_places', 'storage_zones', 'storage_slots', 'item_locations',
     'storage_packages', 'package_items',
-    'subcategories', 'stock_details', 'total_stock'
+    'stock_details', 'total_stock'
 ]);
 
 // ─── Generic Helpers ──────────────────────────────────────────────
@@ -80,7 +79,10 @@ function withFirmId(table: string, values: any): any {
  */
 async function getAll<T>(table: string, extraFilters?: (q: any) => any): Promise<T[]> {
     let q = supabase.from(table).select('*').order('id', { ascending: true });
-    if (FIRM_SCOPED_TABLES.has(table) && getFirmId()) {
+    if (FIRM_SCOPED_TABLES.has(table)) {
+        if (!getFirmId()) {
+            throw new Error(`Data Access Error: firm_id is missing for table '${table}'`);
+        }
         q = q.eq('firm_id', getFirmId());
     }
     if (extraFilters) q = extraFilters(q);

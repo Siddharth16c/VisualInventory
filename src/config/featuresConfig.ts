@@ -124,7 +124,7 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     },
     {
         key: 'settings',
-        label: 'Settings',
+        label: 'Maintenance',
         description: 'App configuration and preferences',
         icon: Settings,
         category: 'admin',
