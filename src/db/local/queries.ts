@@ -292,14 +292,13 @@ export async function insertOrder(firmId: string, order: Partial<Order>, items: 
   const now = new Date().toISOString();
   
   const result = await db.sql<{ id: number }>`
-    INSERT INTO orders (
-      firm_id, prospect_id, prospect_name, order_date, pricing_mode,
-      status, subtotal, tax_amount, discount_amount, grand_total,
-      paid_amount, due_amount, payment_status, due_date, notes, created_at
+    INSERT INTO sales_orders (
+      firm_id, prospect_id, grand_total, order_date, paid_amount,
+      paid_amount, due_amount, payment_status, due_date, notes, created_at,
+      end_of_sale
     ) VALUES (
-      ${firmId}, ${order.prospect_id}, ${order.prospect_name}, ${order.order_date || now.split('T')[0]},
-      ${order.pricing_mode || 'retail'}, ${order.status || 'quote'},
-      ${order.subtotal || 0}, ${order.tax_amount || 0}, ${order.discount_amount || 0}, ${order.grand_total || 0},
+      ${firmId}, ${order.prospect_id}, ${order.grand_total}, ${order.order_date || now.split('T')[0]},
+       
       ${order.paid_amount || 0}, ${order.due_amount || 0}, ${order.payment_status || 'unpaid'},
       ${order.due_date || null}, ${order.notes || null}, ${now}
     ) RETURNING id

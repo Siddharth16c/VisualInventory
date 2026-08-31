@@ -453,14 +453,6 @@ export default function BillDetailsPanel({
             {/* Footer - Action Buttons */}
             <div className="p-4 border-t border-surface-200 bg-white space-y-2">
                 <button
-                    onClick={onSaveAndPrint}
-                    disabled={cartItems.length === 0}
-                    className="w-full btn-primary py-3 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                    <CheckCircle className="h-4 w-4" />
-                    Save & Print Bill
-                </button>
-                <button
                     onClick={onSaveQuote}
                     disabled={cartItems.length === 0}
                     className="w-full btn-secondary py-3 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -468,6 +460,16 @@ export default function BillDetailsPanel({
                     <FileText className="h-4 w-4" />
                     Save as Quote
                 </button>
+                <button
+                    onClick={onSaveAndPrint}
+                    disabled={cartItems.length === 0}
+                    className="w-full btn-primary py-3 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                    <CheckCircle className="h-4 w-4" />
+                    Save & Print Bill
+                </button>
+                
+                
             </div>
         </div>
     );

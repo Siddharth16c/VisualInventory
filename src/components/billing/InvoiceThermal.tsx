@@ -64,40 +64,7 @@ const InvoiceThermal = forwardRef<HTMLDivElement, InvoiceThermalProps>(({ order,
             <div style={{ borderBottom: '1px dashed #000', margin: '4px 0' }} />
 
             {/* Totals */}
-            <div style={{ fontSize: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Subtotal</span>
-                    <span>Rs.{order.subtotal.toFixed(2)}</span>
-                </div>
-                {order.tax_amount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Tax</span>
-                        <span>Rs.{order.tax_amount.toFixed(2)}</span>
-                    </div>
-                )}
-                {order.discount_amount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Disc</span>
-                        <span>-Rs.{order.discount_amount.toFixed(2)}</span>
-                    </div>
-                )}
-                <div style={{ borderBottom: '1px dashed #000', margin: '3px 0' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '13px' }}>
-                    <span>TOTAL</span>
-                    <span>Rs.{order.grand_total.toFixed(2)}</span>
-                </div>
-                {/* Payment info */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                    <span>Paid</span>
-                    <span>Rs.{order.paid_amount.toFixed(2)}</span>
-                </div>
-                {order.due_amount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-                        <span>Due</span>
-                        <span>Rs.{order.due_amount.toFixed(2)}</span>
-                    </div>
-                )}
-            </div>
+            
 
             {/* Footer */}
             <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '9px', borderTop: '1px dashed #000', paddingTop: '4px' }}>

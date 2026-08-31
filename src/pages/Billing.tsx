@@ -24,7 +24,7 @@ import AddItemModal from '@/components/billing/AddItemModal';
 // Icons
 import { ShoppingCart, FileText, AlertCircle, Plus } from 'lucide-react';
 
-type Tab = 'new' | 'saved' | 'unpaid';
+type Tab = 'new' | 'saved' | 'unpaid' | 'cart';
 
 export default function Billing() {
   const [activeTab, setActiveTab] = useState<Tab>('new');
@@ -32,6 +32,7 @@ export default function Billing() {
   const [showPrintHandler, setShowPrintHandler] = useState(false);
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [selectedVerticalId, setSelectedVerticalId] = useState<number | null>(null);
+  
   const [showAddItemModal, setShowAddItemModal] = useState(false);
 
   // Store
@@ -82,21 +83,23 @@ export default function Billing() {
       paid >= grandTotal ? 'paid' : paid > 0 ? 'partial' : 'unpaid';
 
     const order = {
+      firm_id: 1, // Assuming single firm for now
       prospect_id: selectedProspect?.id ?? 0,
-      prospect_name: selectedProspect?.prospectname || 'Walk-in Customer',
-      order_date: new Date().toISOString(),
-      pricing_mode: pricingMode,
-      status: isQuote ? 'quote' : 'pending',
-      subtotal,
-      tax_amount: taxAmt,
-      discount_amount: 0,
+      // prospect_name: selectedProspect?.prospectname || 'Walk-in Customer',
+      due_date: new Date().toISOString(),
+      // pricing_mode: f,
+      // status: isQuote ? 'quote' : 'pending',
+      // subtotal,
+      // tax_amount: taxAmt,
+      // discount_amount: 0,
       grand_total: grandTotal,
       paid_amount: paid,
       due_amount: credit,
-      credit_amount: credit,
-      payment_status: paymentStatus,
-      is_paid: paymentStatus === 'paid',
+      // credit_amount: credit,
+      // payment_status: paymentStatus,
+      // is_paid: paymentStatus === 'paid',
       notes: '',
+      created_at: new Date().toISOString(),
     } as Parameters<typeof DAL.sales_orders.add>[0];
 
     try {
@@ -105,13 +108,13 @@ export default function Billing() {
 
       for (const ci of cartItems) {
         await DAL.sales_order_items.add({
-          order_id: orderId,
+          sales_order_id: orderId,
           item_id: ci.item.id!,
-          item_name: ci.item.item_name,
+          //  item_name_SKU: ci.item.item_name,
           qty: ci.qty,
           unit_price: ci.unit_price,
-          discount: ci.discount,
-          total: ci.qty * ci.unit_price - ci.discount,
+          // discount: ci.discount,
+          // total: ci.qty * ci.unit_price - ci.discount,
         });
       }
 
@@ -132,7 +135,7 @@ export default function Billing() {
         await DAL.bills.add({
           order_id: orderId,
           bill_number: `INV-${new Date().getFullYear()}-${String(orderId).padStart(4, '0')}`,
-          business_name: 'R.S. Enterprises',
+          // business_name: 'R.S. Enterprises',
           print_format: printFormat,
         });
       }
@@ -282,7 +285,19 @@ export default function Billing() {
             <span className="ml-1 text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">
               {unpaidCount}
             </span>
-          )}
+          )}``
+        </button>
+        <button
+          onClick={() => setActiveTab('cart')}
+          className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            activeTab === 'cart'
+              ? 'border-surface-900 text-surface-900'
+              : 'border-transparent text-surface-500 hover:text-surface-700'
+          }`}
+        >
+          <ShoppingCart className="h-4 w-4" />
+          <span className="hidden sm:inline">Cart</span>
+          <span className="sm:hidden">Cart</span>
         </button>
       </div>
 
@@ -312,18 +327,10 @@ export default function Billing() {
               />
             </div>
 
-            {/* Right Panel: Billing Details */}
-            <div className="w-80 flex-shrink-0 border-l border-surface-200">
-              <BillDetailsPanel
-                prospects={prospects}
-                printFormat={printFormat}
-                onPrintFormatChange={setPrintFormat}
-                onSaveQuote={() => handleCreateOrder(true)}
-                onSaveAndPrint={() => handleCreateOrder(false)}
-              />
-            </div>
           </div>
         )}
+
+
 
         {activeTab === 'saved' && (
           <div className="h-full overflow-y-auto p-4">
@@ -349,7 +356,20 @@ export default function Billing() {
             />
           </div>
         )}
+        
+      {activeTab === 'cart' && (
+        <div className="h-full flex">
+              <BillDetailsPanel
+                prospects={prospects}
+                printFormat={printFormat}
+                onPrintFormatChange={setPrintFormat}
+                onSaveQuote={() => handleCreateOrder(true)}
+                onSaveAndPrint={() => handleCreateOrder(false)}
+              />
+            </div>
+        )}
       </div>
+
 
       {/* Print Handler */}
       {showPrintHandler && printOrder && (

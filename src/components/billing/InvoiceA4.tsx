@@ -69,20 +69,7 @@ const InvoiceA4 = forwardRef<HTMLDivElement, InvoiceA4Props>(({ order, items, va
             {/* Totals */}
             <div className="flex justify-end">
                 <div className="w-64 space-y-1 text-sm">
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">Subtotal</span>
-                        <span>Rs.{order.subtotal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-500">Tax</span>
-                        <span>Rs.{order.tax_amount.toFixed(2)}</span>
-                    </div>
-                    {order.discount_amount > 0 && (
-                        <div className="flex justify-between">
-                            <span className="text-gray-500">Discount</span>
-                            <span>-Rs.{order.discount_amount.toFixed(2)}</span>
-                        </div>
-                    )}
+                    
                     <div className="flex justify-between border-t-2 border-gray-800 pt-2 font-bold text-lg">
                         <span>Grand Total</span>
                         <span>Rs.{order.grand_total.toFixed(2)}</span>

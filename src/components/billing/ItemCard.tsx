@@ -5,6 +5,7 @@ interface ItemCardProps {
     item: Item;
     pricingMode: 'retail' | 'wholesale';
     onAddToCart: (item: Item) => void;
+    onEdit: (item: Item) => void;
 }
 
 const getCategoryIcon = (category: string | undefined | null): string => {
@@ -51,7 +52,7 @@ const getStockStatus = (stockParcels: number) => {
     return { color: 'bg-emerald-100 text-emerald-600', label: 'OK' };
 };
 
-export default function ItemCard({ item, pricingMode, onAddToCart }: ItemCardProps) {
+export default function ItemCard({ item, pricingMode, onAddToCart, onEdit }: ItemCardProps) {
     const price = pricingMode === 'wholesale' 
         ? item.wholesale_price_container 
         : item.retail_price_container;
@@ -70,7 +71,7 @@ export default function ItemCard({ item, pricingMode, onAddToCart }: ItemCardPro
                     : 'border-surface-200 bg-white hover:border-surface-400 hover:shadow-sm'
                 }
             `}
-            onClick={() => !isOutOfStock && onAddToCart(item)}
+            onClick={() => onAddToCart(item)}
         >
             {/* Icon/Thumbnail */}
             <div className="w-full aspect-square rounded bg-surface-100 flex items-center justify-center text-2xl mb-1 overflow-hidden">
@@ -101,7 +102,7 @@ export default function ItemCard({ item, pricingMode, onAddToCart }: ItemCardPro
                     ₹{price?.toFixed(0) || '0'}
                 </span>
                 
-                {!isOutOfStock && (
+                { (
                     <button 
                         className="p-0.5 rounded bg-surface-900 text-white opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={(e) => {

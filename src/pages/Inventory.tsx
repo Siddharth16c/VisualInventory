@@ -411,8 +411,8 @@ function ItemModal({
 }
 
 // ─── Inventory Page ─────────────────────────────────────────────
-
-type SortKey = 'item_name' | 'category' | 'retail_price_container' | 'wholesale_price_container' | 'stock_parcels';
+    
+type SortKey = 'item_name' |  'retail_price_container' | 'wholesale_price_container' | 'stock_parcels';
 type SortDir = 'asc' | 'desc';
 
 export default function Inventory() {

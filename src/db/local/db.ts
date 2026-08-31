@@ -217,7 +217,7 @@ async function runMigrations(fromVersion: number) {
       CREATE TABLE IF NOT EXISTS sales_order_items (
         id INTEGER PRIMARY KEY,
         sales_order_id INTEGER NOT NULL,
-        item_name_SKU TEXT NOT NULL,
+        item_name_SKU TEXT ,
         sold_uits REAL DEFAULT NOT NULL,
         total REAL DEFAULT NOT NULL
       )

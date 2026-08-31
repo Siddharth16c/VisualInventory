@@ -16,7 +16,6 @@ export const brands = sqliteTable('brands', {
 export const products = sqliteTable('products', {
     id: integer('id').primaryKey({ autoIncrement: true }),
     name: text('name').notNull().unique(),
-    category: text('category').notNull(),
     vertical_id: integer('vertical_id').notNull().references(() => verticals.id),
 });
 
@@ -49,7 +48,6 @@ export const variant_params_3 = sqliteTable('variant_params_3', {
 export const items = sqliteTable('items', {
     id: integer('id').primaryKey({ autoIncrement: true }),
     item_name: text('item_name').notNull(),
-    category: text('category').notNull(),
     product_id: integer('product_id').references(() => products.id),
     brand_id: integer('brand_id').references(() => brands.id),
     vertical_id: integer('vertical_id').references(() => verticals.id),
@@ -121,7 +119,7 @@ export const bills = sqliteTable('bills', {
     id: integer('id').primaryKey({ autoIncrement: true }),
     order_id: integer('order_id').notNull().references(() => orders.id),
     bill_number: text('bill_number').notNull(),
-    business_name: text('business_name').notNull(),
+    // business_name: text('business_name').notNull(),
     print_format: text('print_format').notNull(), // 'a4' | 'thermal' | 'rawbt'
     pdf_blob: blob('pdf_blob'), // Storing blobs directly isn't ideal for large files in SQLite but mapping it for migration
     createdAt: text('createdAt').notNull(),

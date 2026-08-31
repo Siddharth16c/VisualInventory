@@ -227,7 +227,7 @@ CREATE TABLE public.routes (
 CREATE TABLE public.sales_order_items (
   id bigint NOT NULL DEFAULT nextval('order_items_id_seq'::regclass),
   sales_order_id bigint NOT NULL,
-  item_name_SKU text NOT NULL,
+  item_name_SKU text ,
   sold_units numeric NOT NULL,
   total numeric NOT NULL DEFAULT 0,
   CONSTRAINT sales_order_items_pkey PRIMARY KEY (id),

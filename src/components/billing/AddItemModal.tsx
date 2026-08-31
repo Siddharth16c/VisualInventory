@@ -15,6 +15,8 @@ interface AddItemModalProps {
   onClose: () => void;
   onCreated?: (item: any) => void;
   preselectedVerticalId?: number;
+  verticals?: Vertical[];
+
 }
 
 export default function AddItemModal({ isOpen, onClose, onCreated, preselectedVerticalId }: AddItemModalProps) {
@@ -59,20 +61,19 @@ export default function AddItemModal({ isOpen, onClose, onCreated, preselectedVe
 
   const loadReferenceData = async () => {
     try {
-      const [v, b, pu, sc] = await Promise.all([
+      
+      const [v, b, pu] = await Promise.all([
         DAL.verticals.getAll(),
         DAL.brands.getAll(),
         DAL.packing_units.getAll(),
-        DAL.subcategories.getAll(),
       ]);
       setVerticals(v);
       setBrands(b);
       setPackingUnits(pu);
-      setSubcategories(sc as Subcategory[]);
     } catch (err) {
       console.error('Failed to load reference data:', err);
     }
-  };
+  }; 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -120,7 +121,7 @@ export default function AddItemModal({ isOpen, onClose, onCreated, preselectedVe
         return;
       }
 
-      const stockUnits = formData.p_unit * formData.p_unit_per_parcel * formData.stock_parcels;
+      const stockUnits = +formData.p_unit * formData.p_unit_per_parcel * formData.stock_parcels;
       
       const newItem: any = {
         firm_id: firmId,
@@ -139,7 +140,6 @@ export default function AddItemModal({ isOpen, onClose, onCreated, preselectedVe
         purchase_price_unit: formData.purchase_price_unit,
         reorder_threshold: formData.reorder_threshold,
         thumbnail_base64: formData.thumbnail_base64 || null,
-        category: '',
         created_at: new Date().toISOString(),
       };
 
@@ -166,7 +166,7 @@ export default function AddItemModal({ isOpen, onClose, onCreated, preselectedVe
         reorder_threshold: 0,
         stock_parcels: 0,
         thumbnail_base64: '',
-      });
+        });
       setThumbnailPreview(null);
       onClose();
     } catch (err: any) {
@@ -196,7 +196,6 @@ export default function AddItemModal({ isOpen, onClose, onCreated, preselectedVe
                 <div className="relative w-full h-full">
                   <img src={thumbnailPreview} className="w-full h-full object-cover rounded-lg" />
                   <button
-                    type="button"
                     onClick={handleRemoveThumbnail}
                     className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full"
                   >
@@ -262,7 +261,7 @@ export default function AddItemModal({ isOpen, onClose, onCreated, preselectedVe
                 {verticals.map(v => (
                   <option key={v.id} value={v.id}>{v.name}</option>
                 ))}
-              </select>
+                console.log('verticals', verticals);</select>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-0.5">Brand</label>

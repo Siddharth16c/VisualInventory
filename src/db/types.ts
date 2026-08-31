@@ -88,7 +88,6 @@ export interface Item {
     id: number;
     firm_id: string;
     item_name: string;
-    category: string;
     keyword_id?: string | null;
     reorder_threshold: number;
     purchase_price_unit: number;
@@ -362,15 +361,14 @@ export interface SalesOrder {
     order_date: string;
     pricing_mode: 'retail' | 'wholesale';
     status: 'quote' | 'pending' | 'dispatched' | 'delivered' | 'cancelled';
-    subtotal: number;
-    tax_amount: number;
-    discount_amount: number;
+    // subtotal: number;
+    // tax_amount: number;
+    // discount_amount: number;
     grand_total: number;
     paid_amount: number;
     due_amount: number;
-    credit_amount: number;
     payment_status: 'unpaid' | 'partial' | 'paid';
-    is_paid: boolean;
+    // is_paid: boolean;
     due_date?: string | null;
     notes?: string | null;
     end_of_sale?: boolean | null;

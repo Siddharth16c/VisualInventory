@@ -1076,77 +1076,77 @@ export const DAL = {
         },
     },
 
-    subcategories: {
-        getAll: async () => {
-            const { data, error } = await supabase
-                .from('subcategories')
-                .select('*')
-                .eq('firm_id', getFirmId())
-                .order('vertical_id', { ascending: true })
-                .order('name', { ascending: true });
-            if (error) throw error;
-            emitDbChange('subcategories');
-            return data ?? [];
-        },
+    // subcategories: {
+    //     getAll: async () => {
+    //         const { data, error } = await supabase
+    //             .from('subcategories')
+    //             .select('*')
+    //             .eq('firm_id', getFirmId())
+    //             .order('vertical_id', { ascending: true })
+    //             .order('name', { ascending: true });
+    //         if (error) throw error;
+    //         emitDbChange('subcategories');
+    //         return data ?? [];
+    //     },
 
-        getByVertical: async (verticalId: number) => {
-            const { data, error } = await supabase
-                .from('subcategories')
-                .select('*')
-                .eq('firm_id', getFirmId())
-                .eq('vertical_id', verticalId)
-                .order('name', { ascending: true });
-            if (error) throw error;
-            return data ?? [];
-        },
+    //     getByVertical: async (verticalId: number) => {
+    //         const { data, error } = await supabase
+    //             .from('subcategories')
+    //             .select('*')
+    //             .eq('firm_id', getFirmId())
+    //             .eq('vertical_id', verticalId)
+    //             .order('name', { ascending: true });
+    //         if (error) throw error;
+    //         return data ?? [];
+    //     },
 
-        add: async (val: Omit<Subcategory, 'id' | 'firm_id' | 'created_at' | 'slug'>) => {
-            const { data, error } = await supabase
-                .from('subcategories')
-                .insert({ ...val, firm_id: getFirmId() })
-                .select()
-                .single();
-            if (error) throw error;
-            emitDbChange('subcategories');
-            return data;
-        },
+    //     add: async (val: Omit<Subcategory, 'id' | 'firm_id' | 'created_at' | 'slug'>) => {
+    //         const { data, error } = await supabase
+    //             .from('subcategories')
+    //             .insert({ ...val, firm_id: getFirmId() })
+    //             .select()
+    //             .single();
+    //         if (error) throw error;
+    //         emitDbChange('subcategories');
+    //         return data;
+    //     },
 
-        update: async (id: number, val: Partial<Omit<Subcategory, 'id' | 'firm_id'>>) => {
-            const { data, error } = await supabase
-                .from('subcategories')
-                .update(val)
-                .eq('id', id)
-                .eq('firm_id', getFirmId())
-                .select()
-                .single();
-            if (error) throw error;
-            emitDbChange('subcategories');
-            return data;
-        },
+    //     update: async (id: number, val: Partial<Omit<Subcategory, 'id' | 'firm_id'>>) => {
+    //         const { data, error } = await supabase
+    //             .from('subcategories')
+    //             .update(val)
+    //             .eq('id', id)
+    //             .eq('firm_id', getFirmId())
+    //             .select()
+    //             .single();
+    //         if (error) throw error;
+    //         emitDbChange('subcategories');
+    //         return data;
+    //     },
 
-        delete: async (id: number) => {
-            const { error } = await supabase
-                .from('subcategories')
-                .delete()
-                .eq('id', id)
-                .eq('firm_id', getFirmId());
-            if (error) throw error;
-            emitDbChange('subcategories');
-        },
+    //     delete: async (id: number) => {
+    //         const { error } = await supabase
+    //             .from('subcategories')
+    //             .delete()
+    //             .eq('id', id)
+    //             .eq('firm_id', getFirmId());
+    //         if (error) throw error;
+    //         emitDbChange('subcategories');
+    //     },
 
-        bulkUpsert: async (rows: Array<Omit<Subcategory, 'id' | 'firm_id' | 'created_at' | 'slug'>>) => {
-            const withFirm = rows.map(r => ({ ...r, firm_id: getFirmId() }));
-            const { data, error } = await supabase
-                .from('subcategories')
-                .upsert(withFirm, { onConflict: 'firm_id,vertical_id,name' })
-                .select();
-            if (error) throw error;
-            emitDbChange('subcategories');
-            return data ?? [];
-        },
-    },
+    //     bulkUpsert: async (rows: Array<Omit<Subcategory, 'id' | 'firm_id' | 'created_at' | 'slug'>>) => {
+    //         const withFirm = rows.map(r => ({ ...r, firm_id: getFirmId() }));
+    //         const { data, error } = await supabase
+    //             .from('subcategories')
+    //             .upsert(withFirm, { onConflict: 'firm_id,vertical_id,name' })
+    //             .select();
+    //         if (error) throw error;
+    //         emitDbChange('subcategories');
+    //         return data ?? [];
+    //     },
+    // },
 
-    // ── Spatial: Layer 1 — Storage Places ─────────────────────────
+    // // ── Spatial: Layer 1 — Storage Places ─────────────────────────
 
     storage_places: {
         /** All active (non-deleted) places for this firm */

@@ -175,8 +175,7 @@ export default function App() {
                     <Routes>
                         <Route path="/" element={<Navigate to="/billing" replace />} />
                         <Route path="/billing" element={<Billing />} />
-                        <Route path="/inventory" element={<FeatureRoute feature="inventory"><DBEditor /></FeatureRoute>} />
-                        <Route path="/fieldops" element={<FeatureRoute feature="fieldops"><FieldOps /></FeatureRoute>} />
+                       <Route path="/fieldops" element={<FeatureRoute feature="fieldops"><FieldOps /></FeatureRoute>} />
                         <Route path="/marketing" element={<FeatureRoute feature="marketing"><Marketing /></FeatureRoute>} />
                         <Route path="/suppliers" element={<FeatureRoute feature="suppliers"><Suppliers /></FeatureRoute>} />
                         <Route path="/warehouse" element={<FeatureRoute feature="warehouse"><Warehouse /></FeatureRoute>} />
